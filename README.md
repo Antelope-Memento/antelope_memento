@@ -1,7 +1,7 @@
 Memento: lightweight EOSIO history solution
 ===========================================
 
-In essense, Memento is a MariaDB database containing transaction
+In essence, Memento is a MariaDB database containing transaction
 traces from an EOSIO blockchain (such as EOS, Telos or WAX), and
 providing convenient indexes for quick searching.
 
@@ -27,7 +27,7 @@ that will clean the old transactions.
 
 Memento needs one or two EOSIO state history feeds. It uses
 [Chronicle](https://github.com/EOSChronicleProject/eos-chronicle)
-softeare for decoding the state history.
+software for decoding the state history.
 
 Installation
 ------------
@@ -145,14 +145,14 @@ mysql memento_wax --execute="INSERT INTO SYNC (sourceid, block_num, block_time, 
 If you run the service in single-writer mode, use the dataguard to delete old traces:
 
 ```
-# enabling datagard for data pruning
+# enabling dataguard for data pruning
 echo 'DBWRITER_OPTS="--database=memento_wax --keepdays=7"' >/etc/default/memento_dataguard_wax
 systemctl enable memento_dataguard@wax
 systemctl start memento_dataguard@wax
 ```
 
 
-Acknowledgements
+Acknowledgments
 ----------------
 
 This work was sponsored by [EOS Amsterdam](https://www.apache.org/licenses/LICENSE-2.0.txt) block producer.
