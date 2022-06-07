@@ -1,0 +1,19 @@
+[Unit]
+Description=memento dataguard
+After=mariadb.service
+
+[Service]
+Type=simple
+Environment="MEMENTO_HOME=/opt/eosio_memento"
+EnvironmentFile=/etc/default/memento_dataguard_%i
+
+ExecStart=/usr/bin/perl ${MEMENTO_HOME}/writer/memento_dataguard.pl $DBWRITER_OPTS
+TimeoutSec=45s
+Restart=always
+User=root
+Group=daemon
+KillMode=control-group
+
+
+[Install]
+WantedBy=multi-user.target

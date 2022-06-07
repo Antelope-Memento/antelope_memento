@@ -38,9 +38,9 @@ my $ok = GetOptions
     );
 
 
-if( not $ok or not $sourceid  or scalar(@ARGV) > 0)
+if( not $ok or not $sourceid or not defined($db_name) or scalar(@ARGV) > 0)
 {
-    print STDERR "Usage: $0 --id=N [options...]\n",
+    print STDERR "Usage: $0 --id=N --database=DBNAME [options...]\n",
         "The utility opens a WS port for Chronicle to send data to.\n",
         "Options:\n",
         "  --id=N             source instance identifier (1 or 2)\n",
