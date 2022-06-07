@@ -136,7 +136,7 @@ getdb();
         if( defined($keep_blocks) )
         {
             printf STDERR ("Automatically pruning the history older than %d blocks\n", $keep_blocks);
-        }            
+        }
     }
 }
 
@@ -212,7 +212,15 @@ sub process_data
         $confirmed_block = $block_num-1;
         $unconfirmed_block = $confirmed_block;
 
-        $db->{'sth_fork_transactions'}->execute($block_num);
+        if( $i_am_master )
+        {
+            $db->{'sth_fork_transactions'}->execute($block_num);
+        }
+        else
+        {
+            $db->{'sth_fork_bkp'}->execute($block_num);
+        }
+
         $db->{'sth_upd_sync_fork'}->execute($confirmed_block, $sourceid);
         $db->{'dbh'}->commit();
         $just_committed = 1;
@@ -344,6 +352,7 @@ sub process_data
                     $db->{'sth_fork_transactions'}->execute($start_block);
 
                     # copy data from BKP_TRACES
+                    my $copied_rows = 0;
                     my $sth = $db->{'dbh'}->prepare
                         ('SELECT seq, block_num, block_time, trx_id, trace ' .
                          'FROM BKP_TRACES WHERE block_num >= ? ORDER BY seq');
@@ -354,8 +363,14 @@ sub process_data
                         my $data = eval {$json->decode($js)};
 
                         save_trace($r->[0], $r->[1], $r->[2], $data->{'trace'}, \$js);
+                        $copied_rows++;
                     }
 
+                    $db->{'dbh'}->commit();
+                    $just_committed = 1;
+                    printf STDERR ("Copied %d rows from backup\n", $copied_rows);
+
+                    $db->{'sth_fork_bkp'}->execute($start_block);
                     $db->{'dbh'}->commit();
                     $just_committed = 1;
                 }
@@ -401,6 +416,8 @@ sub getdb
         ('UPDATE SYNC SET block_num=?, block_time=?, irreversible=?, last_updated=NOW() WHERE sourceid=?');
 
     $db->{'sth_fork_transactions'} = $dbh->prepare('DELETE FROM TRANSACTIONS WHERE block_num>=?');
+
+    $db->{'sth_fork_bkp'} = $dbh->prepare('DELETE FROM BKP_TRACES WHERE block_num>=?');
 
     $db->{'sth_upd_sync_fork'} = $dbh->prepare('UPDATE SYNC SET block_num=? WHERE sourceid=?');
 
