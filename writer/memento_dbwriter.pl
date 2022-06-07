@@ -14,7 +14,7 @@ $Protocol::WebSocket::Frame::MAX_FRAGMENTS_AMOUNT = 102400;
 $| = 1;
 
 my $port = 8001;
-my $ack_every = 200;
+my $ack_every = 100;
 
 my $sourceid;
 
@@ -23,6 +23,7 @@ my $db_host = 'localhost';
 my $db_user = 'memento_rw';
 my $db_password = 'LKpoiinjdscudfc';
 
+my $keep_days;
 
 my $ok = GetOptions
     (
@@ -33,6 +34,7 @@ my $ok = GetOptions
      'dbhost=s'  => \$db_host,
      'dbuser=s'  => \$db_user,
      'dbpw=s'    => \$db_password,
+     'keepdays=i' => \$keep_days,
     );
 
 
@@ -47,7 +49,8 @@ if( not $ok or not $sourceid  or scalar(@ARGV) > 0)
         "  --database=DBNAME  \[$db_name\]\n",
         "  --dbhost=HOST      \[$db_host\]\n",
         "  --dbuser=USER      \[$db_user\]\n",
-        "  --dbpw=PASSWORD    \[$db_password\]\n";
+        "  --dbpw=PASSWORD    \[$db_password\]\n",
+        "  --keepdays=N       delete the history older tnan N days\n";
     exit 1;
 }
 
@@ -71,6 +74,12 @@ my $just_committed = 1;
 my $blocks_counter = 0;
 my $trx_counter = 0;
 my $counter_start = time();
+
+my $keep_blocks;
+if( defined($keep_days) )
+{
+    $keep_blocks = $keep_days * 24 * 7200;
+}
 
 getdb();
 
@@ -123,6 +132,11 @@ getdb();
         {
             die("sourceid=" . $masters->[0][0] . " is defined as master, but it has not started yet\n");
         }
+
+        if( defined($keep_blocks) )
+        {
+            printf STDERR ("Automatically pruning the history older than %d blocks\n", $keep_blocks);
+        }            
     }
 }
 
@@ -255,6 +269,10 @@ sub process_data
             if( not $i_am_master )
             {
                 $db->{'sth_clean_bkp'}->execute();
+                if( defined($keep_blocks) )
+                {
+                    $db->{'sth_prune_transactions'}->execute($irreversible - $keep_blocks);
+                }
             }
         }
 
@@ -397,14 +415,16 @@ sub getdb
 
     $db->{'sth_ins_trace'} = $db->{'dbh'}->prepare('INSERT INTO TRACES (seq, trace) VALUES(?,?)');
 
-    $db->{'sth_ins_receipt'} = $db->{'dbh'}->prepare('INSERT INTO RECEIPTS (seq, account_name) VALUES(?,?)');
+    $db->{'sth_ins_receipt'} = $db->{'dbh'}->prepare('INSERT INTO RECEIPTS (seq, block_num, account_name) VALUES(?,?,?)');
 
-    $db->{'sth_ins_action'} = $db->{'dbh'}->prepare('INSERT INTO ACTIONS (seq, contract, action) VALUES(?,?,?)');
+    $db->{'sth_ins_action'} = $db->{'dbh'}->prepare('INSERT INTO ACTIONS (seq, block_num, contract, action) VALUES(?,?,?,?)');
 
     $db->{'sth_ins_bkp'} = $db->{'dbh'}->prepare
         ('INSERT INTO BKP_TRACES (seq, block_num, block_time, trx_id, trace) VALUES(?,?,?,?,?)');
 
     $db->{'sth_clean_bkp'} = $dbh->prepare('DELETE FROM BKP_TRACES WHERE block_num < (SELECT MIN(irreversible) FROM SYNC)');
+
+    $db->{'sth_prune_transactions'} = $dbh->prepare('DELETE FROM TRANSACTIONS WHERE block_num < ?');
 }
 
 
@@ -440,14 +460,14 @@ sub save_trace
 
     foreach my $rcpt (keys %receivers_seen)
     {
-        $db->{'sth_ins_receipt'}->execute($trx_seq, $rcpt);
+        $db->{'sth_ins_receipt'}->execute($trx_seq, $block_num, $rcpt);
     }
 
     foreach my $contract (keys %actions_seen)
     {
         foreach my $aname (keys %{$actions_seen{$contract}})
         {
-            $db->{'sth_ins_action'}->execute($trx_seq, $contract, $aname);
+            $db->{'sth_ins_action'}->execute($trx_seq, $block_num, $contract, $aname);
         }
     }
 }
