@@ -152,6 +152,42 @@ systemctl start memento_dataguard@wax
 ```
 
 
+Example queries
+---------------
+
+```
+# get the current Last irreversible block number (LIR)
+SELECT MIN(irreversible) FROM SYNC;
+
+
+# get all system token transfers related to the account,
+# starting from specific block number, but not newer than LIR
+SELECT seq, ACTIONS.block_num, block_time, trx_id, trace from TRANSACTIONS
+JOIN ACTIONS USING(seq) JOIN RECEIPTS USING (seq) JOIN TRACES using (seq)
+WHERE ACTIONS.contract='eosio.token' AND ACTIONS.action='transfer' AND
+  RECEIPTS.block_num>186201662 AND
+  RECEIPTS.block_num < (SELECT MIN(irreversible) FROM SYNC) AND
+  RECEIPTS.account_name='arenaofglory';
+
+
+# get all transactions related to a specific account, starting from
+# specified sequence number (including reversible transactions which might
+# get dropped or reordered afterwards
+SELECT seq, TRANSACTIONS.block_num, block_time, trx_id, trace from TRANSACTIONS
+JOIN RECEIPTS USING (seq) JOIN TRACES using (seq)
+WHERE 
+  RECEIPTS.account_name='ysjki.c.wam' AND
+  RECEIPTS.seq > 50662607733;  
+
+```
+
+
+Public access
+-------------
+
+See [MEMENTO_PUBLIC_ACCESS.md](MEMENTO_PUBLIC_ACCESS.md).
+
+
 Acknowledgments
 ----------------
 
