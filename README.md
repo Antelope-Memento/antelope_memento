@@ -172,7 +172,7 @@ WHERE ACTIONS.contract='eosio.token' AND ACTIONS.action='transfer' AND
 
 # get all transactions related to a specific account, starting from
 # specified sequence number (including reversible transactions which might
-# get dropped or reordered afterwards
+# get dropped or reordered afterwards)
 SELECT seq, TRANSACTIONS.block_num, block_time, trx_id, trace from TRANSACTIONS
 JOIN RECEIPTS USING (seq) JOIN TRACES using (seq)
 WHERE 
