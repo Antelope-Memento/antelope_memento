@@ -5,6 +5,7 @@ Public access to Memento database
 Provided by EOS Amsterdam
 -------------------------
 
+* Retention periond: 48h
 * MariaDB Host: `memento.eu.eosamsterdam.net`
 * MariaDB Port: 3350
 * User: `memento_ro`
