@@ -63,12 +63,37 @@ while(1)
 {
     $db->{'sth_get_min_irrev'}->execute();
     my $r = $db->{'sth_get_min_irrev'}->fetchall_arrayref();
+    $db->{'dbh'}->commit();
     if( $r->[0][0] > $last_irrev )
     {
         $last_irrev = $r->[0][0];
-        $db->{'sth_prune_transactions'}->execute($last_irrev - $keep_blocks);
-        $db->{'dbh'}->commit();
-        printf STDERR ("irreversible=%d\n", $last_irrev);
+        my $upto_block = $last_irrev - $keep_blocks;
+
+        $db->{'sth_get_min_tx_block'}->execute();
+        $r = $db->{'sth_get_min_tx_block'}->fetchall_arrayref();
+        my $min_block = $r->[0][0];
+        if( $min_block < $upto_block )
+        {
+            printf STDERR ("pruning %d blocks\n", $upto_block - $min_block);
+        }
+
+        while( $min_block < $upto_block )
+        {
+            my $delete_upto = $min_block + 10;
+            if( $delete_upto > $upto_block )
+            {
+                $delete_upto = $upto_block;
+            }
+
+            printf STDERR ("deleting blocks < %d\n", $delete_upto);
+            $db->{'sth_prune_transactions'}->execute($delete_upto);
+            $db->{'dbh'}->commit();
+            $min_block = $delete_upto;
+        }
+    }
+    else
+    {
+        printf STDERR ("nothing to delete\n");
     }
 
     sleep(10);
@@ -87,6 +112,7 @@ sub getdb
 
     $db->{'sth_get_min_irrev'} = $dbh->prepare('SELECT MIN(irreversible) FROM SYNC');
 
+    $db->{'sth_get_min_tx_block'} = $dbh->prepare('SELECT MIN(block_num) FROM TRANSACTIONS');
+
     $db->{'sth_prune_transactions'} = $dbh->prepare('DELETE FROM TRANSACTIONS WHERE block_num < ?');
 }
-
