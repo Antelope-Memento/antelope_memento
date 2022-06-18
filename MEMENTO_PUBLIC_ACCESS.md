@@ -14,7 +14,7 @@ Provided by EOS Amsterdam
   * `memento_eos`
   * `memento_proton`
   * `memento_telos`
-  * `memento_wax`
+  * `memento_wax` (filtered actions: `farmersworld:claim`, `m.federation:mine`)
 
 Example:
 
