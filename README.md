@@ -36,35 +36,11 @@ Installation instructions for an Ubuntu 20.04 host. In this example, a
 single writer is taking a WAX state history feed.
 
 ```
-## Build Chronicle
+## Install Chronicle
 
-apt install -y gnupg software-properties-common
-wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | apt-key add -
-apt-add-repository 'deb https://apt.kitware.com/ubuntu/ focal main'
-add-apt-repository -y ppa:ubuntu-toolchain-r/test
-apt update && apt install -y git g++-8 cmake libssl-dev libgmp-dev zlib1g-dev
-update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-8 800 --slave /usr/bin/g++ g++ /usr/bin/g++-8
-
-mkdir /opt/src
-cd /opt/src
-
-wget https://boostorg.jfrog.io/artifactory/main/release/1.67.0/source/boost_1_67_0.tar.gz
-tar -xvzf boost_1_67_0.tar.gz
-cd boost_1_67_0
-./bootstrap.sh
-nice ./b2 install -j10
-
-
-cd /opt/src
-git clone https://github.com/EOSChronicleProject/eos-chronicle.git
-cd eos-chronicle
-git submodule update --init --recursive
-mkdir build
-cd build
-cmake ..
-nice make -j 10 install
-
-cp /opt/src/eos-chronicle/systemd/chronicle_receiver\@.service /etc/systemd/system/
+wget https://github.com/EOSChronicleProject/eos-chronicle/releases/download/v1.6/eosio-chronicle-1.6-GNU-8.4.0-ubuntu20.04-x86_64.deb
+apt install ./eosio-chronicle-1.6-GNU-8.4.0-ubuntu20.04-x86_64.deb
+cp /usr/local/share/chronicle_receiver\@.service /etc/systemd/system/
 systemctl daemon-reload
 
 
