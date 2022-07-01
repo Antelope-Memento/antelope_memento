@@ -8,6 +8,8 @@ use Protocol::WebSocket::Frame;
 use Time::HiRes qw (time);
 use Time::Local 'timegm_nocheck';
 
+use DBD::Pg qw(:pg_types);
+
 $Protocol::WebSocket::Frame::MAX_PAYLOAD_SIZE = 100*1024*1024;
 $Protocol::WebSocket::Frame::MAX_FRAGMENTS_AMOUNT = 102400;
 
@@ -18,8 +20,7 @@ my $ack_every = 100;
 
 my $sourceid;
 
-my $db_name;
-my $db_host = 'localhost';
+my $dsn;
 my $db_user = 'memento_rw';
 my $db_password = 'LKpoiinjdscudfc';
 
@@ -30,32 +31,27 @@ my $ok = GetOptions
      'id=i'      => \$sourceid,
      'port=i'    => \$port,
      'ack=i'     => \$ack_every,
-     'database=s' => \$db_name,
-     'dbhost=s'  => \$db_host,
+     'dsn=s'     => \$dsn,
      'dbuser=s'  => \$db_user,
      'dbpw=s'    => \$db_password,
      'keepdays=i' => \$keep_days,
     );
 
 
-if( not $ok or not $sourceid or not defined($db_name) or scalar(@ARGV) > 0)
+if( not $ok or not $sourceid or not defined($dsn) or scalar(@ARGV) > 0)
 {
-    print STDERR "Usage: $0 --id=N --database=DBNAME [options...]\n",
+    print STDERR "Usage: $0 --id=N --dsn=DBSTRING [options...]\n",
         "The utility opens a WS port for Chronicle to send data to.\n",
         "Options:\n",
         "  --id=N             source instance identifier (1 or 2)\n",
         "  --port=N           \[$port\] TCP port to listen to websocket connection\n",
         "  --ack=N            \[$ack_every\] Send acknowledgements every N blocks\n",
-        "  --database=DBNAME  \[$db_name\]\n",
-        "  --dbhost=HOST      \[$db_host\]\n",
+        "  --dsn=DBSTRING     database connection string\n",
         "  --dbuser=USER      \[$db_user\]\n",
         "  --dbpw=PASSWORD    \[$db_password\]\n",
         "  --keepdays=N       delete the history older tnan N days\n";
     exit 1;
 }
-
-
-my $dsn = 'dbi:MariaDB:database=' . $db_name . ';host=' . $db_host;
 
 my $json = JSON->new->canonical;
 
@@ -80,6 +76,11 @@ if( defined($keep_days) )
 {
     $keep_blocks = $keep_days * 24 * 7200;
 }
+
+my @insert_transactions;
+my @insert_receipts;
+my @insert_actions;
+my @insert_bkp_traces;
 
 getdb();
 
@@ -214,6 +215,8 @@ sub process_data
 
         if( $i_am_master )
         {
+            $db->{'sth_fork_receipts'}->execute($block_num);
+            $db->{'sth_fork_actions'}->execute($block_num);
             $db->{'sth_fork_transactions'}->execute($block_num);
         }
         else
@@ -245,7 +248,9 @@ sub process_data
                 }
                 else
                 {
-                    $db->{'sth_ins_bkp'}->execute($trx_seq, $block_num, $block_time, $trace->{'id'}, ${$jsptr});
+                    my $dbh = $db->{'dbh'};
+                    push(@insert_bkp_traces,
+                         [$trx_seq, $block_num, $dbh->quote($block_time), $dbh->quote($trace->{'id'}), $dbh->quote(${$jsptr})]);
                 }
 
                 $trx_counter++;
@@ -279,11 +284,26 @@ sub process_data
                 $db->{'sth_clean_bkp'}->execute();
                 if( defined($keep_blocks) )
                 {
-                    $db->{'sth_prune_transactions'}->execute($irreversible - $keep_blocks);
+                    my $upto = $irreversible - $keep_blocks;
+                    $db->{'sth_prune_receipts'}->execute($upto);
+                    $db->{'sth_prune_actions'}->execute($upto);
+                    $db->{'sth_prune_transactions'}->execute($upto);
                 }
             }
         }
 
+        if( $i_am_master )
+        {
+            send_traces_batch();
+        }
+        else
+        {
+            my $query = 'INSERT INTO BKP_TRACES (seq, block_num, block_time, trx_id, trace) VALUES ' .
+            join(',', map {'(' . join(',', @{$_}) . ')'} @insert_bkp_traces);
+            $db->{'dbh'}->do($query);
+            @insert_bkp_traces = ();
+        }
+        
         $unconfirmed_block = $block_num;
 
         if( $unconfirmed_block <= $confirmed_block )
@@ -366,6 +386,7 @@ sub process_data
                         $copied_rows++;
                     }
 
+                    send_traces_batch();
                     $db->{'dbh'}->commit();
                     $just_committed = 1;
                     printf STDERR ("Copied %d rows from backup\n", $copied_rows);
@@ -416,6 +437,8 @@ sub getdb
         ('UPDATE SYNC SET block_num=?, block_time=?, irreversible=?, last_updated=NOW() WHERE sourceid=?');
 
     $db->{'sth_fork_transactions'} = $dbh->prepare('DELETE FROM TRANSACTIONS WHERE block_num>=?');
+    $db->{'sth_fork_receipts'} = $dbh->prepare('DELETE FROM RECEIPTS WHERE block_num>=?');
+    $db->{'sth_fork_actions'} = $dbh->prepare('DELETE FROM ACTIONS WHERE block_num>=?');
 
     $db->{'sth_fork_bkp'} = $dbh->prepare('DELETE FROM BKP_TRACES WHERE block_num>=?');
 
@@ -427,21 +450,11 @@ sub getdb
 
     $db->{'sth_am_i_master'} = $dbh->prepare('SELECT is_master FROM SYNC WHERE sourceid=?');
 
-    $db->{'sth_ins_tx'} = $db->{'dbh'}->prepare
-        ('INSERT INTO TRANSACTIONS (seq, block_num, block_time, trx_id) VALUES(?,?,?,?)');
-
-    $db->{'sth_ins_trace'} = $db->{'dbh'}->prepare('INSERT INTO TRACES (seq, trace) VALUES(?,?)');
-
-    $db->{'sth_ins_receipt'} = $db->{'dbh'}->prepare('INSERT INTO RECEIPTS (seq, block_num, account_name) VALUES(?,?,?)');
-
-    $db->{'sth_ins_action'} = $db->{'dbh'}->prepare('INSERT INTO ACTIONS (seq, block_num, contract, action) VALUES(?,?,?,?)');
-
-    $db->{'sth_ins_bkp'} = $db->{'dbh'}->prepare
-        ('INSERT INTO BKP_TRACES (seq, block_num, block_time, trx_id, trace) VALUES(?,?,?,?,?)');
-
     $db->{'sth_clean_bkp'} = $dbh->prepare('DELETE FROM BKP_TRACES WHERE block_num < (SELECT MIN(irreversible) FROM SYNC)');
 
     $db->{'sth_prune_transactions'} = $dbh->prepare('DELETE FROM TRANSACTIONS WHERE block_num < ?');
+    $db->{'sth_prune_receipts'} = $dbh->prepare('DELETE FROM RECEIPTS WHERE block_num < ?');
+    $db->{'sth_prune_actions'} = $dbh->prepare('DELETE FROM ACTIONS WHERE block_num < ?');
 }
 
 
@@ -472,19 +485,48 @@ sub save_trace
         }
     }
 
-    $db->{'sth_ins_tx'}->execute($trx_seq, $block_num, $block_time, $trace->{'id'});
-    $db->{'sth_ins_trace'}->execute($trx_seq, ${$jsptr});
-
+    my $dbh = $db->{'dbh'};
+    my $qtime = $dbh->quote($block_time);
+    
+    push(@insert_transactions,
+         [$trx_seq, $block_num, $qtime, $dbh->quote($trace->{'id'}), $dbh->quote(${$jsptr}, { pg_type => PG_BYTEA })]);
+    
     foreach my $rcpt (keys %receivers_seen)
     {
-        $db->{'sth_ins_receipt'}->execute($trx_seq, $block_num, $rcpt);
+        push(@insert_receipts, [$trx_seq, $block_num, $qtime, $dbh->quote($rcpt)]);
     }
 
     foreach my $contract (keys %actions_seen)
     {
         foreach my $aname (keys %{$actions_seen{$contract}})
         {
-            $db->{'sth_ins_action'}->execute($trx_seq, $block_num, $contract, $aname);
+            push(@insert_actions, [$trx_seq, $block_num, $qtime, $dbh->quote($contract), $dbh->quote($aname)]);
         }
+    }
+}
+
+
+sub send_traces_batch
+{
+    if( scalar(@insert_transactions) > 0 )
+    {
+        my $query = 'INSERT INTO TRANSACTIONS (seq, block_num, block_time, trx_id, trace) VALUES ' .
+            join(',', map {'(' . join(',', @{$_}) . ')'} @insert_transactions);
+
+        # print STDERR $query, "\n";
+        
+        $db->{'dbh'}->do($query);
+        
+        $query = 'INSERT INTO RECEIPTS (seq, block_num, block_time, account_name) VALUES ' .
+            join(',', map {'(' . join(',', @{$_}) . ')'} @insert_receipts);
+        $db->{'dbh'}->do($query);
+        
+        $query = 'INSERT INTO ACTIONS (seq, block_num, block_time, contract, action) VALUES ' .
+            join(',', map {'(' . join(',', @{$_}) . ')'} @insert_actions);
+        $db->{'dbh'}->do($query);
+        
+        @insert_transactions = ();
+        @insert_receipts = ();
+        @insert_actions = ();
     }
 }
