@@ -8,7 +8,7 @@ use Protocol::WebSocket::Frame;
 use Time::HiRes qw (time);
 use Time::Local 'timegm_nocheck';
 
-use DBD::Pg qw(:pg_types);
+# use DBD::Pg qw(:pg_types);
 
 $Protocol::WebSocket::Frame::MAX_PAYLOAD_SIZE = 100*1024*1024;
 $Protocol::WebSocket::Frame::MAX_FRAGMENTS_AMOUNT = 102400;
@@ -52,6 +52,14 @@ if( not $ok or not $sourceid or not defined($dsn) or scalar(@ARGV) > 0)
         "  --keepdays=N       delete the history older tnan N days\n";
     exit 1;
 }
+
+my $db_binary_type = DBI::SQL_BINARY;
+if( index($dsn, 'dbi:Pg:') == 0 )
+{
+    require DBD::Pg;
+    $db_binary_type = { pg_type => DBD::Pg->PG_BYTEA };
+}
+
 
 my $json = JSON->new->canonical;
 
@@ -489,7 +497,7 @@ sub save_trace
     my $qtime = $dbh->quote($block_time);
     
     push(@insert_transactions,
-         [$trx_seq, $block_num, $qtime, $dbh->quote($trace->{'id'}), $dbh->quote(${$jsptr}, { pg_type => PG_BYTEA })]);
+         [$trx_seq, $block_num, $qtime, $dbh->quote($trace->{'id'}), $dbh->quote(${$jsptr}, $db_binary_type)]);
     
     foreach my $rcpt (keys %receivers_seen)
     {

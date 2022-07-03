@@ -53,6 +53,7 @@ SELECT create_hypertable('RECEIPTS','block_time');
 CREATE INDEX RECEIPTS_I01 ON RECEIPTS (block_num);
 CREATE INDEX RECEIPTS_I02 ON RECEIPTS (account_name, seq);
 CREATE INDEX RECEIPTS_I03 ON RECEIPTS (account_name, block_num);
+CREATE INDEX RECEIPTS_I04 ON RECEIPTS (seq);
 
 /* smart contracts and ACTIONS in each transaction */
 CREATE TABLE ACTIONS
@@ -70,6 +71,7 @@ CREATE INDEX ACTIONS_I01 ON ACTIONS (block_num);
 CREATE INDEX ACTIONS_I02 ON ACTIONS (contract, action, seq);
 CREATE INDEX ACTIONS_I03 ON ACTIONS (contract, action, block_num);
 CREATE INDEX ACTIONS_I04 ON ACTIONS (contract, block_num);
+CREATE INDEX ACTIONS_I05 ON ACTIONS (seq);
 
 
 /* this table is used internally for dual-writer setup. Not for user access */

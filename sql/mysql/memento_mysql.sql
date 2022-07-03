@@ -22,47 +22,46 @@ CREATE TABLE TRANSACTIONS
  seq            BIGINT UNSIGNED PRIMARY KEY,
  block_num      BIGINT NOT NULL,
  block_time     DATETIME NOT NULL,
- trx_id         VARCHAR(64) NOT NULL
+ trx_id         VARCHAR(64) NOT NULL,
+ trace          MEDIUMBLOB NOT NULL
 )  ENGINE=InnoDB;
 
-CREATE INDEX TRANSACTIONS_I01 ON TRANSACTIONS (trx_id(8));
-CREATE INDEX TRANSACTIONS_I02 ON TRANSACTIONS (block_num);
-CREATE INDEX TRANSACTIONS_I03 ON TRANSACTIONS (block_time);
+CREATE INDEX TRANSACTIONS_I01 ON TRANSACTIONS (block_num);
+CREATE INDEX TRANSACTIONS_I02 ON TRANSACTIONS (block_time);
+CREATE INDEX TRANSACTIONS_I03 ON TRANSACTIONS (trx_id(8));
 
-
-/* JSON traces for each transaction */
-CREATE TABLE TRACES
-(
- seq            BIGINT UNSIGNED PRIMARY KEY,
- trace          MEDIUMBLOB NOT NULL,
- FOREIGN KEY (seq) REFERENCES TRANSACTIONS(seq) ON DELETE CASCADE
-)  ENGINE=InnoDB;
 
 /* all receipt recipients for each transaction */
 CREATE TABLE RECEIPTS
 (
  seq            BIGINT UNSIGNED NOT NULL,
  block_num      BIGINT NOT NULL,
+ block_time     DATETIME NOT NULL,
  account_name   VARCHAR(13) NOT NULL,
- FOREIGN KEY (seq) REFERENCES TRANSACTIONS(seq) ON DELETE CASCADE
+ PRIMARY KEY (seq, account_name)
 )  ENGINE=InnoDB;
 
-CREATE UNIQUE INDEX RECEIPTS_I01 ON RECEIPTS (account_name, seq);
-CREATE INDEX RECEIPTS_I02 ON RECEIPTS (account_name, block_num);
+CREATE INDEX RECEIPTS_I01 ON RECEIPTS (block_num);
+CREATE INDEX RECEIPTS_I02 ON RECEIPTS (account_name, seq);
+CREATE INDEX RECEIPTS_I03 ON RECEIPTS (account_name, block_num);
+CREATE INDEX RECEIPTS_I04 ON RECEIPTS (block_time);
 
 /* smart contracts and actions in each transaction */
 CREATE TABLE ACTIONS
 (
  seq            BIGINT UNSIGNED NOT NULL,
  block_num      BIGINT NOT NULL,
+ block_time     DATETIME NOT NULL,
  contract       VARCHAR(13) NOT NULL,
  action         VARCHAR(13) NOT NULL,
- FOREIGN KEY (seq) REFERENCES TRANSACTIONS(seq) ON DELETE CASCADE
+ PRIMARY KEY (seq, contract, action) 
 )  ENGINE=InnoDB;
 
-CREATE UNIQUE INDEX ACTIONS_I01 ON ACTIONS (contract, action, seq);
-CREATE INDEX ACTIONS_I02 ON ACTIONS (contract, action, block_num);
-CREATE INDEX ACTIONS_I03 ON ACTIONS (contract, block_num);
+CREATE INDEX ACTIONS_I01 ON ACTIONS (block_num);
+CREATE INDEX ACTIONS_I02 ON ACTIONS (contract, action, seq);
+CREATE INDEX ACTIONS_I03 ON ACTIONS (contract, action, block_num);
+CREATE INDEX ACTIONS_I04 ON ACTIONS (contract, block_num);
+CREATE INDEX ACTIONS_I05 ON ACTIONS (block_time);
 
 
 /* this table is used internally for dual-writer setup. Not for user access */
