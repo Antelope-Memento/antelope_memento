@@ -1,9 +1,9 @@
 Memento: lightweight EOSIO history solution
 ===========================================
 
-In essence, Memento is a MariaDB database containing transaction
-traces from an EOSIO blockchain (such as EOS, Telos or WAX), and
-providing convenient indexes for quick searching.
+In essence, Memento is a MariaDB or Postgresql/TimescaleDB database
+containing transaction traces from an EOSIO blockchain (such as EOS,
+Telos or WAX), and providing convenient indexes for quick searching.
 
 A typical use case for Memento is tracking incoming and outgoing
 payments for a specific account, and checking their reversibility.
@@ -33,7 +33,8 @@ Installation
 ------------
 
 Installation instructions for an Ubuntu 20.04 host. In this example, a
-single writer is taking a WAX state history feed.
+single writer is taking a WAX state history feed and storing it in a
+MariaDB database.
 
 ```
 ## Install Chronicle
@@ -62,18 +63,23 @@ cp systemd/*.service /etc/systemd/system/
 systemctl daemon-reload
 
 ## initialize the MariaDB users
-sh sql/create_db_users.sh
+sh sql/mysql/create_db_users.sh
 
 ## create the database for WAX history
-sh sql/create_memento_db.sh memento_wax
+sh sql/mysql/create_memento_db.sh memento_wax
 
 ## writer service. Here 8806 is the TCP port is where Chronicle will send its output.
 ## You need to pick the port number that is free on your host.
 ## The first writer has always id=1, and the second writer should have id=2 if you
 ## run it in dual-writer mode.
-echo 'DBWRITER_OPTS="--id=1 --port=8806 --database=memento_wax --keepdays=1"' >/etc/default/memento_wax1
+echo 'DBWRITER_OPTS="--id=1 --port=8806 --dsn=dbi:MariaDB:database=memento_wax"' >/etc/default/memento_wax1
 systemctl enable memento_dbwriter@wax1
 systemctl start memento_dbwriter@wax1
+
+## Dataguard will erase database records older than the specified number of days.
+echo 'DBWRITER_OPTS="--dsn=dbi:MariaDB:database=memento_wax --keepdays=2"' >/etc/default/memento_dataguard_wax
+systemctl enable memento_dataguard@wax
+systemctl start memento_dataguard@wax
 
 
 ## Chronicle initialization. Here host and port point to the EOSIO state history source
@@ -111,20 +117,13 @@ journalctl -u memento_dbwriter@wax1 -f
 If you want to launch Memento in dual-writer mode, you need to add a
 line into SYNC table and start another writer with `--id=2` option. It
 makes sense to run the second writer on an independent host, with an
-independent state history source.
+independent state history source. Also the dataguard is not needed in
+dual-writer mode, as the standby writer is cleaning up the old data
+rows.
 
 ```
 # adding the second writer
 mysql memento_wax --execute="INSERT INTO SYNC (sourceid, block_num, block_time, irreversible, is_master, last_updated) values (2,0, '2000-01-01',0, 0, '2000-01-01')"
-```
-
-If you run the service in single-writer mode, use the dataguard to delete old traces:
-
-```
-# enabling dataguard for data pruning
-echo 'DBWRITER_OPTS="--database=memento_wax --keepdays=7"' >/etc/default/memento_dataguard_wax
-systemctl enable memento_dataguard@wax
-systemctl start memento_dataguard@wax
 ```
 
 
@@ -138,22 +137,24 @@ SELECT MIN(irreversible) FROM SYNC;
 
 # get all system token transfers related to the account,
 # starting from specific block number, but not newer than LIR
-SELECT seq, ACTIONS.block_num, block_time, trx_id, trace from TRANSACTIONS
-JOIN ACTIONS USING(seq) JOIN RECEIPTS USING (seq) JOIN TRACES using (seq)
+SELECT seq, RECEIPTS.block_num, RECEIPTS.block_time, trx_id, trace from TRANSACTIONS
+JOIN ACTIONS USING(seq) JOIN RECEIPTS USING (seq)
 WHERE ACTIONS.contract='eosio.token' AND ACTIONS.action='transfer' AND
-  RECEIPTS.block_num>186201662 AND
+  RECEIPTS.block_num > 186201662 AND
   RECEIPTS.block_num < (SELECT MIN(irreversible) FROM SYNC) AND
-  RECEIPTS.account_name='arenaofglory';
+  RECEIPTS.account_name='arenaofglory'
+ORDER BY seq;
 
 
 # get all transactions related to a specific account, starting from
 # specified sequence number (including reversible transactions which might
 # get dropped or reordered afterwards)
-SELECT seq, TRANSACTIONS.block_num, block_time, trx_id, trace from TRANSACTIONS
-JOIN RECEIPTS USING (seq) JOIN TRACES using (seq)
+SELECT seq, RECEIPTS.block_num, RECEIPTS.block_time, trx_id, trace from TRANSACTIONS
+JOIN RECEIPTS USING (seq)
 WHERE 
   RECEIPTS.account_name='ysjki.c.wam' AND
-  RECEIPTS.seq > 50662607733;  
+  RECEIPTS.seq > 50662607733
+ORDER BY seq;
 
 ```
 
