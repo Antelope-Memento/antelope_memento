@@ -221,6 +221,10 @@ sub process_data
         $confirmed_block = $block_num-1;
         $unconfirmed_block = $confirmed_block;
 
+        @insert_transactions = ();
+        @insert_receipts = ();
+        @insert_actions = ();
+        
         if( $i_am_master )
         {
             $db->{'sth_fork_receipts'}->execute($block_num);

@@ -25,8 +25,7 @@ if( not $ok or not defined($keep_days) or not defined($dsn) or scalar(@ARGV) > 0
     print STDERR "Usage: $0 --keepdays=N --database=DBNAME [options...]\n",
         "The utility opens a WS port for Chronicle to send data to.\n",
         "Options:\n",
-        "  --database=DBNAME  \[$db_name\]\n",
-        "  --dbhost=HOST      \[$db_host\]\n",
+        "  --dsn=DBSTRING     database connection string\n",
         "  --dbuser=USER      \[$db_user\]\n",
         "  --dbpw=PASSWORD    \[$db_password\]\n",
         "  --keepdays=N       delete the history older tnan N days\n";

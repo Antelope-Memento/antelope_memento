@@ -7,5 +7,5 @@ GRANT ALL ON ${DB}.* TO 'memento_rw'@'localhost';
 GRANT SELECT on ${DB}.* to 'memento_ro'@'%';
 EOF
 
-mysql ${DB} <sql/memento_dbtables.sql
+mysql ${DB} <sql/mysql/memento_mysql.sql
 
