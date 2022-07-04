@@ -5,8 +5,7 @@ use DBI;
 
 $| = 1;
 
-my $db_name;
-my $db_host = 'localhost';
+my $dsn;
 my $db_user = 'memento_rw';
 my $db_password = 'LKpoiinjdscudfc';
 
@@ -14,15 +13,14 @@ my $keep_days;
 
 my $ok = GetOptions
     (
-     'database=s' => \$db_name,
-     'dbhost=s'  => \$db_host,
+     'dsn=s'     => \$dsn,
      'dbuser=s'  => \$db_user,
      'dbpw=s'    => \$db_password,
      'keepdays=i' => \$keep_days,
     );
 
 
-if( not $ok or not defined($keep_days) or not defined($db_name) or scalar(@ARGV) > 0)
+if( not $ok or not defined($keep_days) or not defined($dsn) or scalar(@ARGV) > 0)
 {
     print STDERR "Usage: $0 --keepdays=N --database=DBNAME [options...]\n",
         "The utility opens a WS port for Chronicle to send data to.\n",
@@ -35,8 +33,6 @@ if( not $ok or not defined($keep_days) or not defined($db_name) or scalar(@ARGV)
     exit 1;
 }
 
-
-my $dsn = 'dbi:MariaDB:database=' . $db_name . ';host=' . $db_host;
 
 my $db;
 
