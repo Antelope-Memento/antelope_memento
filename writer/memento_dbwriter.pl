@@ -62,6 +62,14 @@ if( index($dsn, 'dbi:Pg:') == 0 )
 }
 
 
+our @trace_hooks;
+our @rollback_hooks;
+
+foreach my $hook (@hooks)
+{
+    require($hook);
+}
+
 my $json = JSON->new->canonical;
 
 
@@ -90,9 +98,6 @@ my @insert_transactions;
 my @insert_receipts;
 my @insert_actions;
 my @insert_bkp_traces;
-
-my @trace_hooks;
-my @rollback_hooks;
 
 getdb();
 
