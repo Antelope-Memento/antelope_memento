@@ -62,6 +62,7 @@ if( index($dsn, 'dbi:Pg:') == 0 )
 }
 
 
+our @prepare_hooks;
 our @trace_hooks;
 our @rollback_hooks;
 
@@ -70,10 +71,9 @@ foreach my $hook (@hooks)
     require($hook);
 }
 
-my $json = JSON->new->canonical;
 
-
-my $db;
+our $json = JSON->new->canonical;
+our $db;
 
 my $confirmed_block = 0;
 my $unconfirmed_block = 0;
@@ -156,6 +156,12 @@ getdb();
             printf STDERR ("Automatically pruning the history older than %d blocks\n", $keep_blocks);
         }
     }
+}
+
+
+foreach my $hook (@prepare_hooks)
+{
+    &{$hook}();
 }
 
 
