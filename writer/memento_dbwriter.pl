@@ -23,8 +23,8 @@ my $sourceid;
 my $dsn;
 my $db_user = 'memento_rw';
 my $db_password = 'LKpoiinjdscudfc';
-
 my $keep_days;
+my @hooks;
 
 my $ok = GetOptions
     (
@@ -35,6 +35,7 @@ my $ok = GetOptions
      'dbuser=s'  => \$db_user,
      'dbpw=s'    => \$db_password,
      'keepdays=i' => \$keep_days,
+     'hook=s'    => \@hooks,
     );
 
 
@@ -89,6 +90,9 @@ my @insert_transactions;
 my @insert_receipts;
 my @insert_actions;
 my @insert_bkp_traces;
+
+my @trace_hooks;
+my @rollback_hooks;
 
 getdb();
 
@@ -224,12 +228,10 @@ sub process_data
         @insert_transactions = ();
         @insert_receipts = ();
         @insert_actions = ();
-        
+
         if( $i_am_master )
         {
-            $db->{'sth_fork_receipts'}->execute($block_num);
-            $db->{'sth_fork_actions'}->execute($block_num);
-            $db->{'sth_fork_transactions'}->execute($block_num);
+            fork_traces($block_num);
         }
         else
         {
@@ -315,7 +317,7 @@ sub process_data
             $db->{'dbh'}->do($query);
             @insert_bkp_traces = ();
         }
-        
+
         $unconfirmed_block = $block_num;
 
         if( $unconfirmed_block <= $confirmed_block )
@@ -381,7 +383,7 @@ sub process_data
 
                     # delete all reversible traces written by old master
                     my $start_block = $master_irrev + 1;
-                    $db->{'sth_fork_transactions'}->execute($start_block);
+                    fork_traces($start_block);
 
                     # copy data from BKP_TRACES
                     my $copied_rows = 0;
@@ -467,6 +469,9 @@ sub getdb
     $db->{'sth_prune_transactions'} = $dbh->prepare('DELETE FROM TRANSACTIONS WHERE block_num < ?');
     $db->{'sth_prune_receipts'} = $dbh->prepare('DELETE FROM RECEIPTS WHERE block_num < ?');
     $db->{'sth_prune_actions'} = $dbh->prepare('DELETE FROM ACTIONS WHERE block_num < ?');
+
+    $db->{'sth_fetch_forking_traces'} =
+        $dbh->prepare('SELECT seq, block_num, block_time, trx_id, trace FROM TRANSACTIONS WHERRE block_num >= ? ORDER BY seq DESC');
 }
 
 
@@ -499,10 +504,10 @@ sub save_trace
 
     my $dbh = $db->{'dbh'};
     my $qtime = $dbh->quote($block_time);
-    
+
     push(@insert_transactions,
          [$trx_seq, $block_num, $qtime, $dbh->quote($trace->{'id'}), $dbh->quote(${$jsptr}, $db_binary_type)]);
-    
+
     foreach my $rcpt (keys %receivers_seen)
     {
         push(@insert_receipts, [$trx_seq, $block_num, $qtime, $dbh->quote($rcpt)]);
@@ -515,6 +520,33 @@ sub save_trace
             push(@insert_actions, [$trx_seq, $block_num, $qtime, $dbh->quote($contract), $dbh->quote($aname)]);
         }
     }
+
+    foreach my $hook (@trace_hooks)
+    {
+        &{$hook}($trx_seq, $block_num, $block_time, $trace, $jsptr);
+    }
+}
+
+
+sub fork_traces
+{
+    my $start_block = shift;
+
+    if( scalar(@rollback_hooks) > 0 )
+    {
+        $db->{'sth_fetch_forking_traces'}->execute($start_block);
+        while( my $r = $db->{'sth_fetch_forking_traces'}->fetchrow_arrayref() )
+        {
+            foreach my $hook (@rollback_hooks)
+            {
+                &{$hook}(@{$r});
+            }
+        }
+    }
+
+    $db->{'sth_fork_receipts'}->execute($start_block);
+    $db->{'sth_fork_actions'}->execute($start_block);
+    $db->{'sth_fork_transactions'}->execute($start_block);
 }
 
 
@@ -526,17 +558,17 @@ sub send_traces_batch
             join(',', map {'(' . join(',', @{$_}) . ')'} @insert_transactions);
 
         # print STDERR $query, "\n";
-        
+
         $db->{'dbh'}->do($query);
-        
+
         $query = 'INSERT INTO RECEIPTS (seq, block_num, block_time, account_name) VALUES ' .
             join(',', map {'(' . join(',', @{$_}) . ')'} @insert_receipts);
         $db->{'dbh'}->do($query);
-        
+
         $query = 'INSERT INTO ACTIONS (seq, block_num, block_time, contract, action) VALUES ' .
             join(',', map {'(' . join(',', @{$_}) . ')'} @insert_actions);
         $db->{'dbh'}->do($query);
-        
+
         @insert_transactions = ();
         @insert_receipts = ();
         @insert_actions = ();
