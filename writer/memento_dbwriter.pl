@@ -24,7 +24,8 @@ my $dsn;
 my $db_user = 'memento_rw';
 my $db_password = 'LKpoiinjdscudfc';
 my $keep_days;
-my @hooks;
+my @plugins;
+my %pluginargs;
 
 my $ok = GetOptions
     (
@@ -35,7 +36,8 @@ my $ok = GetOptions
      'dbuser=s'  => \$db_user,
      'dbpw=s'    => \$db_password,
      'keepdays=i' => \$keep_days,
-     'hook=s'    => \@hooks,
+     'plugin=s'  => \@plugins,
+     'parg=s'    => \%pluginargs,
     );
 
 
@@ -50,7 +52,9 @@ if( not $ok or not $sourceid or not defined($dsn) or scalar(@ARGV) > 0)
         "  --dsn=DBSTRING     database connection string\n",
         "  --dbuser=USER      \[$db_user\]\n",
         "  --dbpw=PASSWORD    \[$db_password\]\n",
-        "  --keepdays=N       delete the history older tnan N days\n";
+        "  --keepdays=N       delete the history older tnan N days\n",
+        "  --plugin=FILE.pl   plugin program for custom processing\n",
+        "  --parg KEY=VAL     plugin configuration options\n";
     exit 1;
 }
 
@@ -66,9 +70,9 @@ our @prepare_hooks;
 our @trace_hooks;
 our @rollback_hooks;
 
-foreach my $hook (@hooks)
+foreach my $plugin (@plugins)
 {
-    require($hook);
+    require($plugin);
 }
 
 
@@ -161,7 +165,7 @@ getdb();
 
 foreach my $hook (@prepare_hooks)
 {
-    &{$hook}();
+    &{$hook}(\%pluginargs);
 }
 
 
