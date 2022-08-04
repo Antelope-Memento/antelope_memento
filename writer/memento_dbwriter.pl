@@ -69,6 +69,8 @@ if( index($dsn, 'dbi:Pg:') == 0 )
 our @prepare_hooks;
 our @trace_hooks;
 our @rollback_hooks;
+our @fork_hooks;
+our @lib_hooks;
 
 foreach my $plugin (@plugins)
 {
@@ -306,8 +308,13 @@ sub process_data
 
         if( $last_irreversible > $irreversible )
         {
-            $irreversible = $last_irreversible;
             # LIB has moved
+            $irreversible = $last_irreversible;
+            foreach my $hook (@lib_hooks)
+            {
+                &{$hook}($irreversible);
+            }
+
             if( not $i_am_master )
             {
                 $db->{'sth_clean_bkp'}->execute();
@@ -546,6 +553,11 @@ sub save_trace
 sub fork_traces
 {
     my $start_block = shift;
+
+    foreach my $hook (@fork_hooks)
+    {
+        &{$hook}($start_block);
+    }
 
     if( scalar(@rollback_hooks) > 0 )
     {
