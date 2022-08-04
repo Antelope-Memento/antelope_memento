@@ -37,7 +37,7 @@ my $ok = GetOptions
      'dbpw=s'    => \$db_password,
      'keepdays=i' => \$keep_days,
      'plugin=s'  => \@plugins,
-     'parg=s'    => \%pluginargs,
+     'parg=s%'   => \%pluginargs,
     );
 
 
