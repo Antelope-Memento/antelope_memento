@@ -71,6 +71,8 @@ if( index($dsn, 'dbi:Pg:') == 0 )
 
 our @prepare_hooks;
 our @trace_hooks;
+our @block_hooks;
+our @ack_hooks;
 our @rollback_hooks;
 our @fork_hooks;
 our @lib_hooks;
@@ -339,6 +341,10 @@ sub process_data
         if( $i_am_master )
         {
             send_traces_batch();
+            foreach my $hook (@block_hooks)
+            {
+                &{$hook}($block_num, $last_irreversible);
+            }
         }
         else
         {
@@ -358,6 +364,14 @@ sub process_data
 
         if( $unconfirmed_block - $confirmed_block >= $ack_every )
         {
+            if( $i_am_master )
+            {
+                foreach my $hook (@ack_hooks)
+                {
+                    &{$hook}($block_num);
+                }
+            }
+
             $db->{'sth_upd_sync_head'}->execute($block_num, $block_time, $last_irreversible, $sourceid);
             $db->{'dbh'}->commit();
             $just_committed = 1;
