@@ -26,6 +26,7 @@ my $db_password = 'LKpoiinjdscudfc';
 my $keep_days;
 my @plugins;
 my %pluginargs;
+my $no_traces;
 
 my $ok = GetOptions
     (
@@ -38,6 +39,7 @@ my $ok = GetOptions
      'keepdays=i' => \$keep_days,
      'plugin=s'  => \@plugins,
      'parg=s%'   => \%pluginargs,
+     'notraces'  => \$no_traces,
     );
 
 
@@ -54,7 +56,8 @@ if( not $ok or not $sourceid or not defined($dsn) or scalar(@ARGV) > 0)
         "  --dbpw=PASSWORD    \[$db_password\]\n",
         "  --keepdays=N       delete the history older tnan N days\n",
         "  --plugin=FILE.pl   plugin program for custom processing\n",
-        "  --parg KEY=VAL     plugin configuration options\n";
+        "  --parg KEY=VAL     plugin configuration options\n",
+        "  --notraces         skip writing TRANSACTIONS, RECEIPTS, ACTIONS tables\n";
     exit 1;
 }
 
@@ -148,6 +151,11 @@ getdb();
     $i_am_master = $r->[0][2];
     printf STDERR ("Starting from confirmed_block=%d, irreversible=%d, sourceid=%d, is_master=%d\n",
                    $confirmed_block, $irreversible, $sourceid, $i_am_master);
+
+    if( $no_traces )
+    {
+        printf STDERR ("Skipping the updates for TRANSACTIONS, RECEIPTS, ACTIONS tables\n");
+    }
 
     if( not $i_am_master )
     {
@@ -505,41 +513,44 @@ sub save_trace
     my $trace = shift;
     my $jsptr = shift;
 
-    my %receivers_seen;
-    my %actions_seen;
-
-    foreach my $atrace (@{$trace->{'action_traces'}})
+    if( not $no_traces )
     {
-        my $act = $atrace->{'act'};
-        my $contract = $act->{'account'};
-        my $aname = $act->{'name'};
-        my $receipt = $atrace->{'receipt'};
-        my $receiver = $receipt->{'receiver'};
+        my %receivers_seen;
+        my %actions_seen;
 
-        $receivers_seen{$receiver} = 1;
-
-        if( $receiver eq $contract )
+        foreach my $atrace (@{$trace->{'action_traces'}})
         {
-            $actions_seen{$contract}{$aname} = 1;
+            my $act = $atrace->{'act'};
+            my $contract = $act->{'account'};
+            my $aname = $act->{'name'};
+            my $receipt = $atrace->{'receipt'};
+            my $receiver = $receipt->{'receiver'};
+
+            $receivers_seen{$receiver} = 1;
+
+            if( $receiver eq $contract )
+            {
+                $actions_seen{$contract}{$aname} = 1;
+            }
         }
-    }
 
-    my $dbh = $db->{'dbh'};
-    my $qtime = $dbh->quote($block_time);
+        my $dbh = $db->{'dbh'};
+        my $qtime = $dbh->quote($block_time);
 
-    push(@insert_transactions,
-         [$trx_seq, $block_num, $qtime, $dbh->quote($trace->{'id'}), $dbh->quote(${$jsptr}, $db_binary_type)]);
+        push(@insert_transactions,
+             [$trx_seq, $block_num, $qtime, $dbh->quote($trace->{'id'}), $dbh->quote(${$jsptr}, $db_binary_type)]);
 
-    foreach my $rcpt (keys %receivers_seen)
-    {
-        push(@insert_receipts, [$trx_seq, $block_num, $qtime, $dbh->quote($rcpt)]);
-    }
-
-    foreach my $contract (keys %actions_seen)
-    {
-        foreach my $aname (keys %{$actions_seen{$contract}})
+        foreach my $rcpt (keys %receivers_seen)
         {
-            push(@insert_actions, [$trx_seq, $block_num, $qtime, $dbh->quote($contract), $dbh->quote($aname)]);
+            push(@insert_receipts, [$trx_seq, $block_num, $qtime, $dbh->quote($rcpt)]);
+        }
+
+        foreach my $contract (keys %actions_seen)
+        {
+            foreach my $aname (keys %{$actions_seen{$contract}})
+            {
+                push(@insert_actions, [$trx_seq, $block_num, $qtime, $dbh->quote($contract), $dbh->quote($aname)]);
+            }
         }
     }
 
