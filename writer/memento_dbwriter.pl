@@ -613,13 +613,19 @@ sub send_traces_batch
 
         $db->{'dbh'}->do($query);
 
-        $query = 'INSERT INTO RECEIPTS (seq, block_num, block_time, account_name) VALUES ' .
-            join(',', map {'(' . join(',', @{$_}) . ')'} @insert_receipts);
-        $db->{'dbh'}->do($query);
+        if( scalar(@insert_receipts) > 0 )
+        {
+            $query = 'INSERT INTO RECEIPTS (seq, block_num, block_time, account_name) VALUES ' .
+                join(',', map {'(' . join(',', @{$_}) . ')'} @insert_receipts);
+            $db->{'dbh'}->do($query);
+        }
 
-        $query = 'INSERT INTO ACTIONS (seq, block_num, block_time, contract, action) VALUES ' .
-            join(',', map {'(' . join(',', @{$_}) . ')'} @insert_actions);
-        $db->{'dbh'}->do($query);
+        if( scalar(@insert_actions) > 0 )
+        {
+            $query = 'INSERT INTO ACTIONS (seq, block_num, block_time, contract, action) VALUES ' .
+                join(',', map {'(' . join(',', @{$_}) . ')'} @insert_actions);
+            $db->{'dbh'}->do($query);
+        }
 
         @insert_transactions = ();
         @insert_receipts = ();
