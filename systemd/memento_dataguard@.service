@@ -4,7 +4,7 @@ After=mariadb.service
 
 [Service]
 Type=simple
-Environment="MEMENTO_HOME=/opt/eosio_memento"
+Environment="MEMENTO_HOME=/opt/antelope_memento"
 EnvironmentFile=/etc/default/memento_dataguard_%i
 
 ExecStart=/usr/bin/perl ${MEMENTO_HOME}/writer/memento_dataguard.pl $DBWRITER_OPTS

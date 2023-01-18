@@ -2,8 +2,9 @@ Memento: lightweight EOSIO history solution
 ===========================================
 
 In essence, Memento is a MariaDB or Postgresql/TimescaleDB database
-containing transaction traces from an EOSIO blockchain (such as EOS,
-Telos or WAX), and providing convenient indexes for quick searching.
+containing transaction traces from an Antelope (ex-EOSIO) blockchain
+(such as EOS, Telos or WAX), and providing convenient indexes for
+quick searching.
 
 A typical use case for Memento is tracking incoming and outgoing
 payments for a specific account, and checking their reversibility.
@@ -28,6 +29,17 @@ that will clean the old transactions.
 Memento needs one or two EOSIO state history feeds. It uses
 [Chronicle](https://github.com/EOSChronicleProject/eos-chronicle)
 software for decoding the state history.
+
+HTTP API
+--------
+
+An HTTP API is available as a standalone package:
+
+https://github.com/Antelope-Memento/antelope_memento_api
+
+It only needs access to the memento database (both MySQL and postgres
+are supported).
+
 
 Installation
 ------------
@@ -57,8 +69,8 @@ cpanm --notest DBD::MariaDB
 
 ## Memento writer
 
-git clone https://github.com/cc32d9/eosio_memento.git /opt/eosio_memento
-cd /opt/eosio_memento
+git clone https://github.com/Antelope-Memento/antelope_memento.git /opt/antelope_memento
+cd /opt/antelope_memento
 cp systemd/*.service /etc/systemd/system/
 systemctl daemon-reload
 
