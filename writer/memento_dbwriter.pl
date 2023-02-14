@@ -293,7 +293,8 @@ sub process_data
                 {
                     my $dbh = $db->{'dbh'};
                     push(@insert_bkp_traces,
-                         [$trx_seq, $block_num, $dbh->quote($block_time), $dbh->quote($trace->{'id'}), $dbh->quote(${$jsptr})]);
+                         [$trx_seq, $block_num, $dbh->quote($block_time), $dbh->quote($trace->{'id'}),
+                          $dbh->quote(${$jsptr}, $db_binary_type)]);
                 }
 
                 $trx_counter++;
