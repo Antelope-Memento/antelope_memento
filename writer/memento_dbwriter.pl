@@ -62,10 +62,12 @@ if( not $ok or not $sourceid or not defined($dsn) or scalar(@ARGV) > 0)
 }
 
 my $db_binary_type = DBI::SQL_BINARY;
+my $db_is_postgres = 0;
 if( index($dsn, 'dbi:Pg:') == 0 )
 {
     require DBD::Pg;
     $db_binary_type = { pg_type => DBD::Pg->PG_BYTEA };
+    $db_is_postgres = 1;
 }
 
 
@@ -346,7 +348,7 @@ sub process_data
                 &{$hook}($block_num, $last_irreversible);
             }
         }
-        else
+        elsif( scalar(@insert_bkp_traces) > 0 )
         {
             my $query = 'INSERT INTO BKP_TRACES (seq, block_num, block_time, trx_id, trace) VALUES ' .
             join(',', map {'(' . join(',', @{$_}) . ')'} @insert_bkp_traces);
@@ -502,9 +504,18 @@ sub getdb
 
     $db->{'sth_upd_sync_fork'} = $dbh->prepare('UPDATE SYNC SET block_num=? WHERE sourceid=?');
 
-    $db->{'sth_check_sync_health'} =
-        $dbh->prepare('SELECT sourceid, irreversible, is_master, TIME_TO_SEC(TIMEDIFF(NOW(), last_updated)) AS upd ' .
-                      'FROM SYNC');
+    if( $db_is_postgres )
+    {
+        $db->{'sth_check_sync_health'} =
+            $dbh->prepare('SELECT sourceid, irreversible, is_master, EXTRACT(EPOCH FROM (NOW() - last_updated)) AS upd ' .
+                          'FROM SYNC');
+    }
+    else
+    {
+        $db->{'sth_check_sync_health'} =
+            $dbh->prepare('SELECT sourceid, irreversible, is_master, TIME_TO_SEC(TIMEDIFF(NOW(), last_updated)) AS upd ' .
+                          'FROM SYNC');
+    }
 
     $db->{'sth_am_i_master'} = $dbh->prepare('SELECT is_master FROM SYNC WHERE sourceid=?');
 
