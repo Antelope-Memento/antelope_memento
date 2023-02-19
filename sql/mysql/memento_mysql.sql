@@ -34,10 +34,12 @@ CREATE INDEX TRANSACTIONS_I03 ON TRANSACTIONS (trx_id(8));
 /* all receipt recipients for each transaction */
 CREATE TABLE RECEIPTS
 (
- seq            BIGINT UNSIGNED NOT NULL,
- block_num      BIGINT NOT NULL,
- block_time     DATETIME NOT NULL,
- account_name   VARCHAR(13) NOT NULL,
+ seq                    BIGINT UNSIGNED NOT NULL,
+ block_num              BIGINT NOT NULL,
+ block_time             DATETIME NOT NULL,
+ account_name           VARCHAR(13) NOT NULL,
+ recv_sequence_start    BIGINT NOT NULL,
+ recv_sequence_count    INTEGER NOT NULL,
  PRIMARY KEY (seq, account_name)
 )  ENGINE=InnoDB;
 
@@ -45,6 +47,16 @@ CREATE INDEX RECEIPTS_I01 ON RECEIPTS (block_num);
 CREATE INDEX RECEIPTS_I02 ON RECEIPTS (account_name, seq);
 CREATE INDEX RECEIPTS_I03 ON RECEIPTS (account_name, block_num);
 CREATE INDEX RECEIPTS_I04 ON RECEIPTS (block_time);
+CREATE INDEX RECEIPTS_I05 ON RECEIPTS (account_name, recv_sequence_start);
+
+
+/* latest recorded recv_sequence for each account */
+CREATE TABLE RECV_SEQUENCE_MAX
+(
+ account_name           VARCHAR(13) PRIMARY KEY,
+ recv_sequence_max      BIGINT NOT NULL
+)  ENGINE=InnoDB;
+
 
 /* smart contracts and actions in each transaction */
 CREATE TABLE ACTIONS

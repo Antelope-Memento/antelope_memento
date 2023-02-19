@@ -109,6 +109,7 @@ if( defined($keep_days) )
 
 my @insert_transactions;
 my @insert_receipts;
+my %upsert_recv_seq_max;
 my @insert_actions;
 my @insert_bkp_traces;
 
@@ -158,7 +159,7 @@ getdb();
 
     if( $no_traces )
     {
-        printf STDERR ("Skipping the updates for TRANSACTIONS, RECEIPTS, ACTIONS tables\n");
+        printf STDERR ("Skipping the updates for TRANSACTIONS, RECEIPTS, RECV_SEQUENCE_MAX, ACTIONS tables\n");
     }
 
     if( not $i_am_master )
@@ -256,6 +257,7 @@ sub process_data
 
         @insert_transactions = ();
         @insert_receipts = ();
+        %upsert_recv_seq_max = ();
         @insert_actions = ();
 
         if( $i_am_master )
@@ -541,7 +543,8 @@ sub save_trace
 
     if( not $no_traces )
     {
-        my %receivers_seen;
+        my %recv_seq_start;
+        my %recv_seq_max;
         my %actions_seen;
 
         foreach my $atrace (@{$trace->{'action_traces'}})
@@ -552,7 +555,12 @@ sub save_trace
             my $receipt = $atrace->{'receipt'};
             my $receiver = $receipt->{'receiver'};
 
-            $receivers_seen{$receiver} = 1;
+            if( not exists($recv_seq_start{$receiver}) )
+            {
+                $recv_seq_start{$receiver} = $receipt->{'recv_sequence'};
+            }
+
+            $recv_seq_max{$receiver} = $receipt->{'recv_sequence'};
 
             if( $receiver eq $contract )
             {
@@ -566,9 +574,14 @@ sub save_trace
         push(@insert_transactions,
              [$trx_seq, $block_num, $qtime, $dbh->quote($trace->{'id'}), $dbh->quote(${$jsptr}, $db_binary_type)]);
 
-        foreach my $rcpt (keys %receivers_seen)
+        foreach my $rcpt (keys %recv_seq_start)
         {
-            push(@insert_receipts, [$trx_seq, $block_num, $qtime, $dbh->quote($rcpt)]);
+            my $seq_start = $recv_seq_start{$rcpt};
+            my $seq_max = $recv_seq_max{$rcpt};
+
+            push(@insert_receipts, [$trx_seq, $block_num, $qtime, $dbh->quote($rcpt),
+                                    $seq_start, $seq_max - $seq_start + 1]);
+            $upsert_recv_seq_max{$rcpt} = $seq_max;
         }
 
         foreach my $contract (keys %actions_seen)
@@ -618,29 +631,48 @@ sub send_traces_batch
 {
     if( scalar(@insert_transactions) > 0 )
     {
+        my $dbh = $db->{'dbh'};
+
         my $query = 'INSERT INTO TRANSACTIONS (seq, block_num, block_time, trx_id, trace) VALUES ' .
             join(',', map {'(' . join(',', @{$_}) . ')'} @insert_transactions);
 
-        # print STDERR $query, "\n";
-
-        $db->{'dbh'}->do($query);
+        $dbh->do($query);
 
         if( scalar(@insert_receipts) > 0 )
         {
-            $query = 'INSERT INTO RECEIPTS (seq, block_num, block_time, account_name) VALUES ' .
+            $query = 'INSERT INTO RECEIPTS (seq, block_num, block_time, account_name, ' .
+                                            ' recv_sequence_start, recv_sequence_count) VALUES ' .
                 join(',', map {'(' . join(',', @{$_}) . ')'} @insert_receipts);
-            $db->{'dbh'}->do($query);
+            $dbh->do($query);
+        }
+
+        if( scalar(keys %upsert_recv_seq_max) > 0 )
+        {
+            if( $db_is_postgres )
+            {
+                $query = 'INSERT INTO RECV_SEQUENCE_MAX (account_name, recv_sequence_max) VALUES ' .
+                    join(',', map {'(' . $dbh->quote($_) . ',' . $upsert_recv_seq_max{$_} . ')'} keys %upsert_recv_seq_max) .
+                    ' ON CONFLICT (account_name) DO UPDATE SET recv_sequence_max = EXCLUDED.recv_sequence_max';
+            }
+            else
+            {
+                $query = 'INSERT INTO RECV_SEQUENCE_MAX (account_name, recv_sequence_max) VALUES ' .
+                    join(',', map {'(' . $dbh->quote($_) . ',' . $upsert_recv_seq_max{$_} . ')'} keys %upsert_recv_seq_max) .
+                    ' ON DUPLICATE KEY UPDATE recv_sequence_max = VALUES(recv_sequence_max)';
+            }
+            $dbh->do($query);
         }
 
         if( scalar(@insert_actions) > 0 )
         {
             $query = 'INSERT INTO ACTIONS (seq, block_num, block_time, contract, action) VALUES ' .
                 join(',', map {'(' . join(',', @{$_}) . ')'} @insert_actions);
-            $db->{'dbh'}->do($query);
+            $dbh->do($query);
         }
 
         @insert_transactions = ();
         @insert_receipts = ();
+        %upsert_recv_seq_max = ();
         @insert_actions = ();
     }
 }

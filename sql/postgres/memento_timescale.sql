@@ -39,10 +39,12 @@ CREATE INDEX TRANSACTIONS_I03 ON TRANSACTIONS (trx_id);
 /* all receipt recipients for each transaction */
 CREATE TABLE RECEIPTS
 (
- seq            BIGINT NOT NULL,
- block_num      BIGINT NOT NULL,
- block_time     TIMESTAMP WITHOUT TIME ZONE NOT NULL,
- account_name   VARCHAR(13) NOT NULL
+ seq                    BIGINT NOT NULL,
+ block_num              BIGINT NOT NULL,
+ block_time             TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+ account_name           VARCHAR(13) NOT NULL,
+ recv_sequence_start    BIGINT NOT NULL,
+ recv_sequence_count    INTEGER NOT NULL
 );
 
 SELECT create_hypertable('RECEIPTS','block_time');
@@ -51,6 +53,17 @@ CREATE INDEX RECEIPTS_I01 ON RECEIPTS (block_num);
 CREATE INDEX RECEIPTS_I02 ON RECEIPTS (account_name, seq);
 CREATE INDEX RECEIPTS_I03 ON RECEIPTS (account_name, block_num);
 CREATE INDEX RECEIPTS_I04 ON RECEIPTS (seq);
+CREATE INDEX RECEIPTS_I05 ON RECEIPTS (account_name, recv_sequence_start);
+
+
+/* latest recorded recv_sequence for each account */
+CREATE TABLE RECV_SEQUENCE_MAX
+(
+ account_name           VARCHAR(13) PRIMARY KEY,
+ recv_sequence_max      BIGINT NOT NULL
+);
+
+
 
 /* smart contracts and ACTIONS in each transaction */
 CREATE TABLE ACTIONS
