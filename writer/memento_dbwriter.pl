@@ -61,8 +61,8 @@ if( not $ok or not $sourceid or not defined($dsn) or scalar(@ARGV) > 0)
     exit 1;
 }
 
-my $db_binary_type = DBI::SQL_BINARY;
-my $db_is_postgres = 0;
+our $db_binary_type = DBI::SQL_BINARY;
+our $db_is_postgres = 0;
 if( index($dsn, 'dbi:Pg:') == 0 )
 {
     require DBD::Pg;

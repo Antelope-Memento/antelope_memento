@@ -10,6 +10,7 @@ CREATE TABLE TOKEN_TRANSFERS
  tx_from        VARCHAR(13) NOT NULL,
  tx_to          VARCHAR(13) NOT NULL,
  amount         DECIMAL(22,0) NOT NULL,
+ decimals       SMALLINT NOT NULL,
  memo           BYTEA NOT NULL
 );
 
