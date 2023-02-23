@@ -10,6 +10,7 @@ EnvironmentFile=/etc/default/memento_%i
 ExecStart=/usr/bin/perl ${MEMENTO_HOME}/writer/memento_dbwriter.pl $DBWRITER_OPTS
 TimeoutSec=45s
 Restart=always
+RestartSec=60
 User=root
 Group=daemon
 KillMode=control-group
@@ -17,3 +18,4 @@ KillMode=control-group
 
 [Install]
 WantedBy=multi-user.target
+
