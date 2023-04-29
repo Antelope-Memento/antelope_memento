@@ -562,10 +562,7 @@ sub save_trace
 
             $recv_seq_max{$receiver} = $receipt->{'recv_sequence'};
 
-            if( $receiver eq $contract )
-            {
-                $actions_seen{$contract}{$aname} = 1;
-            }
+            $actions_seen{$contract}{$aname}{$receiver} = 1;
         }
 
         my $dbh = $db->{'dbh'};
@@ -588,7 +585,11 @@ sub save_trace
         {
             foreach my $aname (keys %{$actions_seen{$contract}})
             {
-                push(@insert_actions, [$trx_seq, $block_num, $qtime, $dbh->quote($contract), $dbh->quote($aname)]);
+                foreach my $receiver (keys %{$actions_seen{$contract}{$aname}})
+                {
+                    push(@insert_actions, [$trx_seq, $block_num, $qtime,
+                                           $dbh->quote($contract), $dbh->quote($aname), $dbh->quote($receiver)]);
+                }
             }
         }
     }
@@ -665,7 +666,7 @@ sub send_traces_batch
 
         if( scalar(@insert_actions) > 0 )
         {
-            $query = 'INSERT INTO ACTIONS (seq, block_num, block_time, contract, action) VALUES ' .
+            $query = 'INSERT INTO ACTIONS (seq, block_num, block_time, contract, action, account_name) VALUES ' .
                 join(',', map {'(' . join(',', @{$_}) . ')'} @insert_actions);
             $dbh->do($query);
         }

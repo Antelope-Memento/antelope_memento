@@ -17,8 +17,9 @@ VALUES (1,0, '2000-01-01 00:00',0, 1, '2000-01-01 00:00');
 /*
    parent table for transactions.
    "seq"  is a unique sequence number supplied by the blockchain.
+   It is the global sequence number of the first receipt in the transaction.
    It may be reassigned to a different transaction after a microfork.
-*/ 
+*/
 CREATE TABLE TRANSACTIONS
 (
  seq            BIGINT NOT NULL,
@@ -30,7 +31,7 @@ CREATE TABLE TRANSACTIONS
 
 SELECT create_hypertable('TRANSACTIONS','block_time');
 
-CREATE INDEX TRANSACTIONS_I01 ON TRANSACTIONS (seq);
+CREATE UNIQUE INDEX TRANSACTIONS_I01 ON TRANSACTIONS (seq, block_time);
 CREATE INDEX TRANSACTIONS_I02 ON TRANSACTIONS (block_num);
 CREATE INDEX TRANSACTIONS_I03 ON TRANSACTIONS (trx_id);
 
@@ -72,16 +73,20 @@ CREATE TABLE ACTIONS
  block_num      BIGINT NOT NULL,
  block_time     TIMESTAMP WITHOUT TIME ZONE NOT NULL,
  contract       VARCHAR(13) NOT NULL,
- action         VARCHAR(13) NOT NULL
+ action         VARCHAR(13) NOT NULL,
+ account_name   VARCHAR(13) NOT NULL  /* receipt recipient */
 );
 
 SELECT create_hypertable('ACTIONS','block_time');
 
-CREATE INDEX ACTIONS_I01 ON ACTIONS (block_num);
-CREATE INDEX ACTIONS_I02 ON ACTIONS (contract, action, seq);
-CREATE INDEX ACTIONS_I03 ON ACTIONS (contract, action, block_num);
-CREATE INDEX ACTIONS_I04 ON ACTIONS (contract, block_num);
-CREATE INDEX ACTIONS_I05 ON ACTIONS (seq);
+CREATE INDEX ACTIONS_I01 ON ACTIONS (seq);
+CREATE INDEX ACTIONS_I02 ON ACTIONS (block_num);
+CREATE INDEX ACTIONS_I03 ON ACTIONS (contract, seq);
+CREATE INDEX ACTIONS_I04 ON ACTIONS (contract, action, seq);
+CREATE INDEX ACTIONS_I05 ON ACTIONS (contract, action, account_name, seq);
+CREATE INDEX ACTIONS_I06 ON ACTIONS (contract, block_num);
+CREATE INDEX ACTIONS_I07 ON ACTIONS (contract, action, block_num);
+CREATE INDEX ACTIONS_I08 ON ACTIONS (contract, action, account_name, block_num);
 
 
 /* this table is used internally for dual-writer setup. Not for user access */

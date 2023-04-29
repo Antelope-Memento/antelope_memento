@@ -15,8 +15,9 @@ INSERT INTO SYNC (sourceid, block_num, block_time, irreversible, is_master, last
 /*
    parent table for transactions.
    "seq"  is a unique sequence number supplied by the blockchain.
+   It is the global sequence number of the first receipt in the transaction.
    It may be reassigned to a different transaction after a microfork.
-*/ 
+*/
 CREATE TABLE TRANSACTIONS
 (
  seq            BIGINT UNSIGNED PRIMARY KEY,
@@ -66,14 +67,19 @@ CREATE TABLE ACTIONS
  block_time     DATETIME NOT NULL,
  contract       VARCHAR(13) NOT NULL,
  action         VARCHAR(13) NOT NULL,
- PRIMARY KEY (seq, contract, action) 
+ account_name   VARCHAR(13) NOT NULL,  /* receipt recipient */
+ PRIMARY KEY (seq, contract, action, account_name)
 )  ENGINE=InnoDB;
 
-CREATE INDEX ACTIONS_I01 ON ACTIONS (block_num);
-CREATE INDEX ACTIONS_I02 ON ACTIONS (contract, action, seq);
-CREATE INDEX ACTIONS_I03 ON ACTIONS (contract, action, block_num);
-CREATE INDEX ACTIONS_I04 ON ACTIONS (contract, block_num);
-CREATE INDEX ACTIONS_I05 ON ACTIONS (block_time);
+
+CREATE INDEX ACTIONS_I01 ON ACTIONS (seq);
+CREATE INDEX ACTIONS_I02 ON ACTIONS (block_num);
+CREATE INDEX ACTIONS_I03 ON ACTIONS (contract, seq);
+CREATE INDEX ACTIONS_I04 ON ACTIONS (contract, action, seq);
+CREATE INDEX ACTIONS_I05 ON ACTIONS (contract, action, account_name, seq);
+CREATE INDEX ACTIONS_I06 ON ACTIONS (contract, block_num);
+CREATE INDEX ACTIONS_I07 ON ACTIONS (contract, action, block_num);
+CREATE INDEX ACTIONS_I08 ON ACTIONS (contract, action, account_name, block_num);
 
 
 /* this table is used internally for dual-writer setup. Not for user access */
