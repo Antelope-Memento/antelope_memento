@@ -82,7 +82,6 @@ while(1)
 
             printf STDERR ("deleting blocks < %d\n", $delete_upto);
             $db->{'sth_prune_receipts'}->execute($delete_upto);
-            $db->{'sth_prune_actions'}->execute($delete_upto);
             $db->{'sth_prune_transactions'}->execute($delete_upto);
             $db->{'dbh'}->commit();
             $min_block = $delete_upto;
@@ -113,5 +112,4 @@ sub getdb
 
     $db->{'sth_prune_transactions'} = $dbh->prepare('DELETE FROM TRANSACTIONS WHERE block_num < ?');
     $db->{'sth_prune_receipts'} = $dbh->prepare('DELETE FROM RECEIPTS WHERE block_num < ?');
-    $db->{'sth_prune_actions'} = $dbh->prepare('DELETE FROM ACTIONS WHERE block_num < ?');
 }

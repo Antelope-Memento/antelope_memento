@@ -28,8 +28,7 @@ CREATE TABLE TRANSACTIONS
 )  ENGINE=InnoDB;
 
 CREATE INDEX TRANSACTIONS_I01 ON TRANSACTIONS (block_num);
-CREATE INDEX TRANSACTIONS_I02 ON TRANSACTIONS (block_time);
-CREATE INDEX TRANSACTIONS_I03 ON TRANSACTIONS (trx_id(8));
+CREATE INDEX TRANSACTIONS_I01 ON TRANSACTIONS (trx_id(8));
 
 
 /* all receipt recipients for each transaction */
@@ -38,17 +37,18 @@ CREATE TABLE RECEIPTS
  seq                    BIGINT UNSIGNED NOT NULL,
  block_num              BIGINT NOT NULL,
  block_time             DATETIME NOT NULL,
- account_name           VARCHAR(13) NOT NULL,
- recv_sequence_start    BIGINT NOT NULL,
- recv_sequence_count    INTEGER NOT NULL,
- PRIMARY KEY (seq, account_name)
+ contract               VARCHAR(13) NOT NULL,
+ action                 VARCHAR(13) NOT NULL,
+ receiver               VARCHAR(13) NOT NULL,
+ recv_sequence          BIGINT NOT NULL,
+ PRIMARY KEY (receiver, contract, action, recv_sequence, seq)
 )  ENGINE=InnoDB;
 
+
 CREATE INDEX RECEIPTS_I01 ON RECEIPTS (block_num);
-CREATE INDEX RECEIPTS_I02 ON RECEIPTS (account_name, seq);
-CREATE INDEX RECEIPTS_I03 ON RECEIPTS (account_name, block_num);
-CREATE INDEX RECEIPTS_I04 ON RECEIPTS (block_time);
-CREATE INDEX RECEIPTS_I05 ON RECEIPTS (account_name, recv_sequence_start);
+CREATE INDEX RECEIPTS_I02 ON RECEIPTS (receiver, block_time, seq);
+CREATE INDEX RECEIPTS_I03 ON RECEIPTS (receiver, recv_sequence, seq);
+CREATE INDEX RECEIPTS_I04 ON RECEIPTS (receiver, contract, action, block_time, seq);
 
 
 /* latest recorded recv_sequence for each account */
@@ -58,28 +58,6 @@ CREATE TABLE RECV_SEQUENCE_MAX
  recv_sequence_max      BIGINT NOT NULL
 )  ENGINE=InnoDB;
 
-
-/* smart contracts and actions in each transaction */
-CREATE TABLE ACTIONS
-(
- seq            BIGINT UNSIGNED NOT NULL,
- block_num      BIGINT NOT NULL,
- block_time     DATETIME NOT NULL,
- contract       VARCHAR(13) NOT NULL,
- action         VARCHAR(13) NOT NULL,
- account_name   VARCHAR(13) NOT NULL,  /* receipt recipient */
- PRIMARY KEY (seq, contract, action, account_name)
-)  ENGINE=InnoDB;
-
-
-CREATE INDEX ACTIONS_I01 ON ACTIONS (seq);
-CREATE INDEX ACTIONS_I02 ON ACTIONS (block_num);
-CREATE INDEX ACTIONS_I03 ON ACTIONS (contract, seq);
-CREATE INDEX ACTIONS_I04 ON ACTIONS (contract, action, seq);
-CREATE INDEX ACTIONS_I05 ON ACTIONS (contract, action, account_name, seq);
-CREATE INDEX ACTIONS_I06 ON ACTIONS (contract, block_num);
-CREATE INDEX ACTIONS_I07 ON ACTIONS (contract, action, block_num);
-CREATE INDEX ACTIONS_I08 ON ACTIONS (contract, action, account_name, block_num);
 
 
 /* this table is used internally for dual-writer setup. Not for user access */

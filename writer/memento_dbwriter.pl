@@ -57,7 +57,7 @@ if( not $ok or not $sourceid or not defined($dsn) or scalar(@ARGV) > 0)
         "  --keepdays=N       delete the history older tnan N days\n",
         "  --plugin=FILE.pl   plugin program for custom processing\n",
         "  --parg KEY=VAL     plugin configuration options\n",
-        "  --notraces         skip writing TRANSACTIONS, RECEIPTS, ACTIONS tables\n";
+        "  --notraces         skip writing TRANSACTIONS, RECEIPTS tables\n";
     exit 1;
 }
 
@@ -110,7 +110,6 @@ if( defined($keep_days) )
 my @insert_transactions;
 my @insert_receipts;
 my %upsert_recv_seq_max;
-my @insert_actions;
 my @insert_bkp_traces;
 
 getdb();
@@ -159,7 +158,7 @@ getdb();
 
     if( $no_traces )
     {
-        printf STDERR ("Skipping the updates for TRANSACTIONS, RECEIPTS, RECV_SEQUENCE_MAX, ACTIONS tables\n");
+        printf STDERR ("Skipping the updates for TRANSACTIONS, RECEIPTS, RECV_SEQUENCE_MAX tables\n");
     }
 
     if( not $i_am_master )
@@ -258,7 +257,6 @@ sub process_data
         @insert_transactions = ();
         @insert_receipts = ();
         %upsert_recv_seq_max = ();
-        @insert_actions = ();
 
         if( $i_am_master )
         {
@@ -337,7 +335,6 @@ sub process_data
                 {
                     my $upto = $irreversible - $keep_blocks;
                     $db->{'sth_prune_receipts'}->execute($upto);
-                    $db->{'sth_prune_actions'}->execute($upto);
                     $db->{'sth_prune_transactions'}->execute($upto);
                 }
             }
@@ -501,7 +498,6 @@ sub getdb
 
     $db->{'sth_fork_transactions'} = $dbh->prepare('DELETE FROM TRANSACTIONS WHERE block_num>=?');
     $db->{'sth_fork_receipts'} = $dbh->prepare('DELETE FROM RECEIPTS WHERE block_num>=?');
-    $db->{'sth_fork_actions'} = $dbh->prepare('DELETE FROM ACTIONS WHERE block_num>=?');
 
     $db->{'sth_fork_bkp'} = $dbh->prepare('DELETE FROM BKP_TRACES WHERE block_num>=?');
 
@@ -526,7 +522,6 @@ sub getdb
 
     $db->{'sth_prune_transactions'} = $dbh->prepare('DELETE FROM TRANSACTIONS WHERE block_num < ?');
     $db->{'sth_prune_receipts'} = $dbh->prepare('DELETE FROM RECEIPTS WHERE block_num < ?');
-    $db->{'sth_prune_actions'} = $dbh->prepare('DELETE FROM ACTIONS WHERE block_num < ?');
 
     $db->{'sth_fetch_forking_traces'} =
         $dbh->prepare('SELECT seq, block_num, block_time, trx_id, trace FROM TRANSACTIONS WHERRE block_num >= ? ORDER BY seq DESC');
@@ -543,54 +538,24 @@ sub save_trace
 
     if( not $no_traces )
     {
-        my %recv_seq_start;
-        my %recv_seq_max;
-        my %actions_seen;
-
-        foreach my $atrace (@{$trace->{'action_traces'}})
-        {
-            my $act = $atrace->{'act'};
-            my $contract = $act->{'account'};
-            my $aname = $act->{'name'};
-            my $receipt = $atrace->{'receipt'};
-            my $receiver = $receipt->{'receiver'};
-
-            if( not exists($recv_seq_start{$receiver}) )
-            {
-                $recv_seq_start{$receiver} = $receipt->{'recv_sequence'};
-            }
-
-            $recv_seq_max{$receiver} = $receipt->{'recv_sequence'};
-
-            $actions_seen{$contract}{$aname}{$receiver} = 1;
-        }
-
         my $dbh = $db->{'dbh'};
         my $qtime = $dbh->quote($block_time);
 
         push(@insert_transactions,
              [$trx_seq, $block_num, $qtime, $dbh->quote($trace->{'id'}), $dbh->quote(${$jsptr}, $db_binary_type)]);
 
-        foreach my $rcpt (keys %recv_seq_start)
+        foreach my $atrace (@{$trace->{'action_traces'}})
         {
-            my $seq_start = $recv_seq_start{$rcpt};
-            my $seq_max = $recv_seq_max{$rcpt};
+            my $act = $atrace->{'act'};
+            my $receipt = $atrace->{'receipt'};
+            my $receiver = $receipt->{'receiver'};
+            my $recv_sequence = $receipt->{'recv_sequence'};
 
-            push(@insert_receipts, [$trx_seq, $block_num, $qtime, $dbh->quote($rcpt),
-                                    $seq_start, $seq_max - $seq_start + 1]);
-            $upsert_recv_seq_max{$rcpt} = $seq_max;
-        }
+            push(@insert_receipts, [$trx_seq, $block_num, $qtime, $dbh->quote($act->{'account'}),
+                                    $dbh->quote($act->{'name'}), $dbh->quote($receiver),
+                                    $recv_sequence]);
 
-        foreach my $contract (keys %actions_seen)
-        {
-            foreach my $aname (keys %{$actions_seen{$contract}})
-            {
-                foreach my $receiver (keys %{$actions_seen{$contract}{$aname}})
-                {
-                    push(@insert_actions, [$trx_seq, $block_num, $qtime,
-                                           $dbh->quote($contract), $dbh->quote($aname), $dbh->quote($receiver)]);
-                }
-            }
+            $upsert_recv_seq_max{$receiver} = $recv_sequence;
         }
     }
 
@@ -623,7 +588,6 @@ sub fork_traces
     }
 
     $db->{'sth_fork_receipts'}->execute($start_block);
-    $db->{'sth_fork_actions'}->execute($start_block);
     $db->{'sth_fork_transactions'}->execute($start_block);
 }
 
@@ -641,8 +605,7 @@ sub send_traces_batch
 
         if( scalar(@insert_receipts) > 0 )
         {
-            $query = 'INSERT INTO RECEIPTS (seq, block_num, block_time, account_name, ' .
-                                            ' recv_sequence_start, recv_sequence_count) VALUES ' .
+            $query = 'INSERT INTO RECEIPTS (seq, block_num, block_time, contract, action, receiver, recv_sequence) VALUES ' .
                 join(',', map {'(' . join(',', @{$_}) . ')'} @insert_receipts);
             $dbh->do($query);
         }
@@ -664,16 +627,8 @@ sub send_traces_batch
             $dbh->do($query);
         }
 
-        if( scalar(@insert_actions) > 0 )
-        {
-            $query = 'INSERT INTO ACTIONS (seq, block_num, block_time, contract, action, account_name) VALUES ' .
-                join(',', map {'(' . join(',', @{$_}) . ')'} @insert_actions);
-            $dbh->do($query);
-        }
-
         @insert_transactions = ();
         @insert_receipts = ();
         %upsert_recv_seq_max = ();
-        @insert_actions = ();
     }
 }

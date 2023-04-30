@@ -43,18 +43,19 @@ CREATE TABLE RECEIPTS
  seq                    BIGINT NOT NULL,
  block_num              BIGINT NOT NULL,
  block_time             TIMESTAMP WITHOUT TIME ZONE NOT NULL,
- account_name           VARCHAR(13) NOT NULL,
- recv_sequence_start    BIGINT NOT NULL,
- recv_sequence_count    INTEGER NOT NULL
+ contract               VARCHAR(13) NOT NULL,
+ action                 VARCHAR(13) NOT NULL,
+ receiver               VARCHAR(13) NOT NULL,
+ recv_sequence          BIGINT NOT NULL
 );
 
 SELECT create_hypertable('RECEIPTS','block_time');
 
 CREATE INDEX RECEIPTS_I01 ON RECEIPTS (block_num);
-CREATE INDEX RECEIPTS_I02 ON RECEIPTS (account_name, seq);
-CREATE INDEX RECEIPTS_I03 ON RECEIPTS (account_name, block_num);
-CREATE INDEX RECEIPTS_I04 ON RECEIPTS (seq);
-CREATE INDEX RECEIPTS_I05 ON RECEIPTS (account_name, recv_sequence_start);
+CREATE INDEX RECEIPTS_I02 ON RECEIPTS (receiver, block_time) INCLUDE (seq, recv_sequence);
+CREATE INDEX RECEIPTS_I03 ON RECEIPTS (receiver, recv_sequence) INCLUDE (seq);
+CREATE INDEX RECEIPTS_I04 ON RECEIPTS (receiver, contract, action, recv_sequence) INCLUDE (seq);
+CREATE INDEX RECEIPTS_I05 ON RECEIPTS (receiver, contract, action, block_time) INCLUDE (seq, recv_sequence);
 
 
 /* latest recorded recv_sequence for each account */
@@ -64,29 +65,6 @@ CREATE TABLE RECV_SEQUENCE_MAX
  recv_sequence_max      BIGINT NOT NULL
 );
 
-
-
-/* smart contracts and ACTIONS in each transaction */
-CREATE TABLE ACTIONS
-(
- seq            BIGINT NOT NULL,
- block_num      BIGINT NOT NULL,
- block_time     TIMESTAMP WITHOUT TIME ZONE NOT NULL,
- contract       VARCHAR(13) NOT NULL,
- action         VARCHAR(13) NOT NULL,
- account_name   VARCHAR(13) NOT NULL  /* receipt recipient */
-);
-
-SELECT create_hypertable('ACTIONS','block_time');
-
-CREATE INDEX ACTIONS_I01 ON ACTIONS (seq);
-CREATE INDEX ACTIONS_I02 ON ACTIONS (block_num);
-CREATE INDEX ACTIONS_I03 ON ACTIONS (contract, seq);
-CREATE INDEX ACTIONS_I04 ON ACTIONS (contract, action, seq);
-CREATE INDEX ACTIONS_I05 ON ACTIONS (contract, action, account_name, seq);
-CREATE INDEX ACTIONS_I06 ON ACTIONS (contract, block_num);
-CREATE INDEX ACTIONS_I07 ON ACTIONS (contract, action, block_num);
-CREATE INDEX ACTIONS_I08 ON ACTIONS (contract, action, account_name, block_num);
 
 
 /* this table is used internally for dual-writer setup. Not for user access */
