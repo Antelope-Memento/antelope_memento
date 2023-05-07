@@ -148,24 +148,12 @@ SELECT MIN(irreversible) FROM SYNC;
 
 
 # get all system token transfers related to the account,
-# starting from specific block number, but not newer than LIR
-SELECT seq, RECEIPTS.block_num, RECEIPTS.block_time, trx_id, trace from TRANSACTIONS
-JOIN ACTIONS USING(seq) JOIN RECEIPTS USING (seq)
-WHERE ACTIONS.contract='eosio.token' AND ACTIONS.action='transfer' AND
-  RECEIPTS.block_num > 186201662 AND
-  RECEIPTS.block_num < (SELECT MIN(irreversible) FROM SYNC) AND
-  RECEIPTS.account_name='arenaofglory'
-ORDER BY seq;
-
-
-# get all transactions related to a specific account, starting from
-# specified sequence number (including reversible transactions which might
-# get dropped or reordered afterwards)
-SELECT seq, RECEIPTS.block_num, RECEIPTS.block_time, trx_id, trace from TRANSACTIONS
+# starting from specific position, selecting only irreversible transactions
+SELECT recv_sequence, RECEIPTS.block_num, RECEIPTS.block_time, trx_id, trace from TRANSACTIONS
 JOIN RECEIPTS USING (seq)
-WHERE 
-  RECEIPTS.account_name='ysjki.c.wam' AND
-  RECEIPTS.seq > 50662607733
+WHERE receiver='jsd4o.c.wam' AND contract='eosio.token' AND action='transfer'
+AND recv_sequence>76
+AND RECEIPTS.block_num < (SELECT MIN(irreversible) FROM SYNC)
 ORDER BY seq;
 
 ```
