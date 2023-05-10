@@ -374,7 +374,7 @@ sub process_data
                 }
             }
 
-            $db->{'sth_upd_sync_head'}->execute($block_num, $block_time, $last_irreversible, $sourceid);
+            $db->{'sth_upd_sync_head'}->execute($block_num, $block_time, $data->{'block_id'}, $last_irreversible, $sourceid);
             $db->{'dbh'}->commit();
             $just_committed = 1;
             $confirmed_block = $unconfirmed_block;
@@ -494,7 +494,7 @@ sub getdb
     die($DBI::errstr) unless $dbh;
 
     $db->{'sth_upd_sync_head'} = $dbh->prepare
-        ('UPDATE SYNC SET block_num=?, block_time=?, irreversible=?, last_updated=NOW() WHERE sourceid=?');
+        ('UPDATE SYNC SET block_num=?, block_time=?, block_id=?, irreversible=?, last_updated=NOW() WHERE sourceid=?');
 
     $db->{'sth_fork_transactions'} = $dbh->prepare('DELETE FROM TRANSACTIONS WHERE block_num>=?');
     $db->{'sth_fork_receipts'} = $dbh->prepare('DELETE FROM RECEIPTS WHERE block_num>=?');

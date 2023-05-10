@@ -5,6 +5,7 @@ CREATE TABLE SYNC
  sourceid          INT PRIMARY KEY,
  block_num         BIGINT NOT NULL,
  block_time        DATETIME NOT NULL,
+ block_id          VARCHAR(64) NOT NULL,
  irreversible      BIGINT NOT NULL,
  is_master         SMALLINT NOT NULL,
  last_updated      DATETIME NOT NULL
