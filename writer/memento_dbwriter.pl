@@ -345,7 +345,7 @@ sub process_data
             send_traces_batch();
             foreach my $hook (@block_hooks)
             {
-                &{$hook}($block_num, $last_irreversible);
+                &{$hook}($block_num, $last_irreversible, $data->{'block_id'});
             }
         }
         elsif( scalar(@insert_bkp_traces) > 0 )
