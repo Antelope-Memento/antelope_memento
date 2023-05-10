@@ -11,8 +11,8 @@ CREATE TABLE SYNC
  last_updated      TIMESTAMP WITHOUT TIME ZONE NOT NULL
 );
 
-INSERT INTO SYNC (sourceid, block_num, block_time, irreversible, is_master, last_updated)
-VALUES (1,0, '2000-01-01 00:00',0, 1, '2000-01-01 00:00');
+INSERT INTO SYNC (sourceid, block_num, block_time, block_id, irreversible, is_master, last_updated)
+VALUES (1,0, '2000-01-01 00:00','',0, 1, '2000-01-01 00:00');
 
 
 /*

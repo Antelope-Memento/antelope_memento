@@ -11,7 +11,8 @@ CREATE TABLE SYNC
  last_updated      DATETIME NOT NULL
 ) ENGINE=InnoDB;
 
-INSERT INTO SYNC (sourceid, block_num, block_time, irreversible, is_master, last_updated) values (1,0, '2000-01-01',0, 1, '2000-01-01');
+INSERT INTO SYNC (sourceid, block_num, block_time, block_id, irreversible, is_master, last_updated)
+VALUES (1,0, '2000-01-01','',0, 1, '2000-01-01');
 
 /*
    parent table for transactions.
