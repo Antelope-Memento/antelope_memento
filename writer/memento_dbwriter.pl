@@ -8,8 +8,6 @@ use Protocol::WebSocket::Frame;
 use Time::HiRes qw (time);
 use Time::Local 'timegm_nocheck';
 
-# use DBD::Pg qw(:pg_types);
-
 $Protocol::WebSocket::Frame::MAX_PAYLOAD_SIZE = 100*1024*1024;
 $Protocol::WebSocket::Frame::MAX_FRAGMENTS_AMOUNT = 102400;
 
@@ -78,6 +76,7 @@ our @ack_hooks;
 our @rollback_hooks;
 our @fork_hooks;
 our @lib_hooks;
+our @prune_hooks;
 
 foreach my $plugin (@plugins)
 {
@@ -336,6 +335,10 @@ sub process_data
                     my $upto = $irreversible - $keep_blocks;
                     $db->{'sth_prune_receipts'}->execute($upto);
                     $db->{'sth_prune_transactions'}->execute($upto);
+                    foreach my $hook (@prune_hooks)
+                    {
+                        &{$hook}($upto);
+                    }
                 }
             }
         }

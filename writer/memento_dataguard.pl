@@ -10,6 +10,8 @@ my $db_user = 'memento_rw';
 my $db_password = 'LKpoiinjdscudfc';
 
 my $keep_days;
+my @plugins;
+my %pluginargs;
 
 my $ok = GetOptions
     (
@@ -17,6 +19,8 @@ my $ok = GetOptions
      'dbuser=s'  => \$db_user,
      'dbpw=s'    => \$db_password,
      'keepdays=i' => \$keep_days,
+     'plugin=s'  => \@plugins,
+     'parg=s%'   => \%pluginargs,
     );
 
 
@@ -28,12 +32,23 @@ if( not $ok or not defined($keep_days) or not defined($dsn) or scalar(@ARGV) > 0
         "  --dsn=DBSTRING     database connection string\n",
         "  --dbuser=USER      \[$db_user\]\n",
         "  --dbpw=PASSWORD    \[$db_password\]\n",
-        "  --keepdays=N       delete the history older tnan N days\n";
+        "  --keepdays=N       delete the history older tnan N days\n",
+        "  --plugin=FILE.pl   plugin program for custom processing\n",
+        "  --parg KEY=VAL     plugin configuration options\n";
     exit 1;
 }
 
 
-my $db;
+our @prepare_hooks;
+our @prune_hooks;
+
+foreach my $plugin (@plugins)
+{
+    require($plugin);
+}
+
+
+our $db;
 
 my $keep_blocks = $keep_days * 24 * 7200;
 
@@ -51,6 +66,13 @@ getdb();
 }
 
 printf STDERR ("Automatically pruning the history older than %d blocks\n", $keep_blocks);
+
+
+foreach my $hook (@prepare_hooks)
+{
+    &{$hook}(\%pluginargs);
+}
+
 
 my $last_irrev = 0;
 
@@ -83,6 +105,11 @@ while(1)
             printf STDERR ("deleting blocks < %d\n", $delete_upto);
             $db->{'sth_prune_receipts'}->execute($delete_upto);
             $db->{'sth_prune_transactions'}->execute($delete_upto);
+            foreach my $hook (@prune_hooks)
+            {
+                &{$hook}($delete_upto);
+            }
+
             $db->{'dbh'}->commit();
             $min_block = $delete_upto;
         }

@@ -1,7 +1,5 @@
 use strict;
 use warnings;
-use DBD::Pg qw(:pg_types);
-
 
 my @insert_transfers;
 
@@ -109,6 +107,15 @@ sub transfers_fork
 }
 
 
+sub transfers_prune
+{
+    my $upto = shift;
+
+    my $dbh = $main::db->{'dbh'};
+    my $sth = $dbh->prepare('DELETE FROM TOKEN_TRANSFERS WHERE block_num < ?');
+    $sth->execute($upto);
+}
+
 
 
 
@@ -116,5 +123,6 @@ push(@main::prepare_hooks, \&transfers_prepare);
 push(@main::trace_hooks, \&transfers_trace);
 push(@main::ack_hooks, \&transfers_ack);
 push(@main::fork_hooks, \&transfers_fork);
+push(@main::prune_hooks, \&transfers_prune);
 
 1;
