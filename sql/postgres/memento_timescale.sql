@@ -67,6 +67,25 @@ CREATE TABLE RECV_SEQUENCE_MAX
 );
 
 
+/*
+ A log of Chronicle events, keeping a few hundred blocks behind the last irreversible block,
+ and up to the head block.
+  `id` is an incrementing row identifier. The numbers never repeat.
+  `event_type` is a Chronicle event type. The following values are to be expected:
+     1001 CHRONICLE_MSGTYPE_FORK
+     1003 CHRONICLE_MSGTYPE_TX_TRACE
+  `data` is the JSON data as-is, received from Chronicle.
+*/
+CREATE TABLE EVENT_LOG
+(
+ id             BIGINT PRIMARY KEY,
+ block_num      BIGINT NOT NULL,
+ event_type     SMALLINT NOT NULL,
+ data           BYTEA NOT NULL
+);
+
+CREATE INDEX EVENT_LOG_I01 ON EVENT_LOG (block_num, id);
+
 
 /* this table is used internally for dual-writer setup. Not for user access */
 CREATE TABLE BKP_TRACES

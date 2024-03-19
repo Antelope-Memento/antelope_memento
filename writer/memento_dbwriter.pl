@@ -25,6 +25,7 @@ my $keep_days;
 my @plugins;
 my %pluginargs;
 my $no_traces;
+my $keep_event_log;
 
 my $ok = GetOptions
     (
@@ -38,6 +39,7 @@ my $ok = GetOptions
      'plugin=s'  => \@plugins,
      'parg=s%'   => \%pluginargs,
      'notraces'  => \$no_traces,
+     'events=n'  => \$keep_event_log,
     );
 
 
@@ -55,7 +57,8 @@ if( not $ok or not $sourceid or not defined($dsn) or scalar(@ARGV) > 0)
         "  --keepdays=N       delete the history older tnan N days\n",
         "  --plugin=FILE.pl   plugin program for custom processing\n",
         "  --parg KEY=VAL     plugin configuration options\n",
-        "  --notraces         skip writing TRANSACTIONS, RECEIPTS tables\n";
+        "  --notraces         skip writing TRANSACTIONS, RECEIPTS tables\n",
+        "  --events=N         write to EVENT_LOG table and keep N blocks past the LIB\n",
     exit 1;
 }
 
@@ -90,6 +93,7 @@ our $db;
 my $confirmed_block = 0;
 my $unconfirmed_block = 0;
 my $irreversible = 0;
+my $log_id;
 
 my $i_am_master;
 my $retired_on = 0; # timestamp of last time losing master status
@@ -109,6 +113,7 @@ if( defined($keep_days) )
 my @insert_transactions;
 my @insert_receipts;
 my %upsert_recv_seq_max;
+my @insert_event_log;
 my @insert_bkp_traces;
 
 getdb();
@@ -209,6 +214,7 @@ Net::WebSocket::Server->new(
                         printf STDERR ("I am no longer the master (sourceid=%d)\n", $sourceid);
                         $i_am_master = 0;
                         $retired_on = time();
+                        $log_id = undef;
                     }
                     $just_committed = 0;
                 }
@@ -235,6 +241,14 @@ sub process_data
     my $msgtype = shift;
     my $data = shift;
     my $jsptr = shift;
+
+    if( $i_am_master and defined($keep_event_log) )
+    {
+        if( $msgtype == 1001 or $msgtype == 1003 )
+        {
+            push(@insert_event_log, [$data->{'block_num'}, $msgtype, $db->{'dbh'}->quote(${$jsptr}, $db_binary_type)]);
+        }
+    }
 
     if( $msgtype == 1001 ) # CHRONICLE_MSGTYPE_FORK
     {
@@ -341,6 +355,10 @@ sub process_data
                     }
                 }
             }
+            else
+            {
+                $db->{'sth_clean_log'}->execute($keep_event_log);
+            }
         }
 
         if( $i_am_master )
@@ -350,6 +368,7 @@ sub process_data
             {
                 &{$hook}($block_num, $last_irreversible, $data->{'block_id'});
             }
+            send_events_batch();
         }
         elsif( scalar(@insert_bkp_traces) > 0 )
         {
@@ -421,9 +440,10 @@ sub process_data
                     printf STDERR ("my_upd=%d, my_irrev=%d, master_upd=%d, master_irrev=%d\n",
                                    $my_upd, $my_irrev, $master_upd, $master_irrev);
 
-                    $db->{'dbh'}->do('UPDATE SYNC SET is_master=0 WHERE sourceid != ?', undef, $sourceid);
-                    $db->{'dbh'}->do('UPDATE SYNC SET is_master=1 WHERE sourceid = ?', undef, $sourceid);
-                    $db->{'dbh'}->commit();
+                    my $dbh = $db->{'dbh'};
+                    $dbh->do('UPDATE SYNC SET is_master=0 WHERE sourceid != ?', undef, $sourceid);
+                    $dbh->do('UPDATE SYNC SET is_master=1 WHERE sourceid = ?', undef, $sourceid);
+                    $dbh->commit();
 
                     $i_am_master = 1;
 
@@ -434,9 +454,16 @@ sub process_data
                     my $start_block = $master_irrev + 1;
                     fork_traces($start_block);
 
+                    if( defined($keep_event_log) )
+                    {
+                        # insert an explicit fork
+                        push(@insert_event_log, [$start_block, 1001,
+                                                 $dbh->quote('{"block_num":"' . $start_block . '"}', $db_binary_type)]);
+                    }
+
                     # copy data from BKP_TRACES
                     my $copied_rows = 0;
-                    my $sth = $db->{'dbh'}->prepare
+                    my $sth = $dbh->prepare
                         ('SELECT seq, block_num, block_time, trx_id, trace ' .
                          'FROM BKP_TRACES WHERE block_num >= ? ORDER BY seq');
                     $sth->execute($start_block);
@@ -447,15 +474,20 @@ sub process_data
 
                         save_trace($r->[0], $r->[1], $r->[2], $data->{'trace'}, \$js);
                         $copied_rows++;
+                        if( defined($keep_event_log) )
+                        {
+                            push(@insert_event_log, [$r->[1], 1003, $dbh->quote($r->[4], $db_binary_type)]);
+                        }
                     }
 
                     send_traces_batch();
-                    $db->{'dbh'}->commit();
+                    send_events_batch();
+                    $dbh->commit();
                     $just_committed = 1;
                     printf STDERR ("Copied %d rows from backup\n", $copied_rows);
 
                     $db->{'sth_fork_bkp'}->execute($start_block);
-                    $db->{'dbh'}->commit();
+                    $dbh->commit();
                     $just_committed = 1;
                 }
             }
@@ -528,6 +560,8 @@ sub getdb
 
     $db->{'sth_fetch_forking_traces'} =
         $dbh->prepare('SELECT seq, block_num, block_time, trx_id, trace FROM TRANSACTIONS WHERRE block_num >= ? ORDER BY seq DESC');
+
+    $db->{'sth_clean_log'} = $dbh->prepare('DELETE FROM EVENT_LOG WHERE block_num < (SELECT MIN(irreversible) FROM SYNC) - ?');
 }
 
 
@@ -633,5 +667,33 @@ sub send_traces_batch
         @insert_transactions = ();
         @insert_receipts = ();
         %upsert_recv_seq_max = ();
+    }
+}
+
+
+sub send_events_batch
+{
+    if( $i_am_master and defined($keep_event_log) and scalar(@insert_event_log) > 0 )
+    {
+        if( not defined($log_id) )
+        {
+            my $sth = $db->{'dbh'}->prepare('SELECT MAX(id) FROM EVENT_LOG');
+            $sth->execute();
+            my $r = $sth->fetchall_arrayref();
+            if( scalar(@{$r}) > 0 )
+            {
+                $log_id = $r->[0][0];
+            }
+            else
+            {
+                $log_id = 0;
+            }
+        }
+
+        my $query = 'INSERT INTO EVENT_LOG (id, block_num, event_type, data) VALUES ' .
+            join(',', map {'(' . join(',', ++$log_id, @{$_}) . ')'} @insert_event_log);
+
+        $db->{'dbh'}->do($query);
+        @insert_event_log = ();
     }
 }
