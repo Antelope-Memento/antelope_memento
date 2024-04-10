@@ -138,7 +138,7 @@ getdb();
         ('SELECT sourceid, block_num, irreversible FROM SYNC WHERE is_master=0');
     $sth->execute();
     my $slaves = $sth->fetchall_arrayref();
-    if( scalar(@{$masters}) > 1 )
+    if( scalar(@{$slaves}) > 1 )
     {
         die("SYNC table contains more than one slave\n");
     }
