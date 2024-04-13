@@ -357,7 +357,10 @@ sub process_data
             }
             else
             {
-                $db->{'sth_clean_log'}->execute($keep_event_log);
+                if( defined($keep_event_log) )
+                {
+                    $db->{'sth_clean_log'}->execute($keep_event_log);
+                }
             }
         }
 
@@ -561,7 +564,10 @@ sub getdb
     $db->{'sth_fetch_forking_traces'} =
         $dbh->prepare('SELECT seq, block_num, block_time, trx_id, trace FROM TRANSACTIONS WHERRE block_num >= ? ORDER BY seq DESC');
 
-    $db->{'sth_clean_log'} = $dbh->prepare('DELETE FROM EVENT_LOG WHERE block_num < (SELECT MIN(irreversible) FROM SYNC) - ?');
+    if( defined($keep_event_log) )
+    {
+        $db->{'sth_clean_log'} = $dbh->prepare('DELETE FROM EVENT_LOG WHERE block_num < (SELECT MIN(irreversible) FROM SYNC) - ?');
+    }
 }
 
 
