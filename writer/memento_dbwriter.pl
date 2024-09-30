@@ -327,7 +327,7 @@ sub process_data
             printf STDERR ("WARNING: missing blocks %d to %d\n", $unconfirmed_block+1, $block_num-1);
         }
 
-        if( $block_num > $last_irreversible )
+        if( $block_num > $last_irreversible - 10 )
         {
             $ack_every = 1;
         }
